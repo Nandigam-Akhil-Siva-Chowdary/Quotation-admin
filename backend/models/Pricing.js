@@ -1,86 +1,81 @@
 const mongoose = require('mongoose');
 
-const courtSizes = {
-  // Standard dimensions in square meters
-  'basketball': { standard: 420, custom: 0, recreational: 0 },
-  'badminton': { standard: 81.74, custom: 0, recreational: 0 }, // 13.4m x 6.1m
-  'boxcricket': { standard: 750, custom: 0, recreational: 0 }, // 30m x 25m
-  'football': { standard: 7140, custom: 0, recreational: 0 },
-  'gymflooring': { standard: 200, custom: 0, recreational: 0 },
-  'pickleball': { standard: 65, custom: 0, recreational: 0 },
-  'running-track': { standard: 4000, custom: 0, recreational: 0 },
-  'tennis': { standard: 260, custom: 0, recreational: 0 },
-  'volleyball': { standard: 162, custom: 0, recreational: 0 }
-};
+const courtSizesSchema = new mongoose.Schema({
+  standard: { type: Number, default: 0 },
+  custom: { type: Number, default: 0 },
+  recreational: { type: Number, default: 0 }
+});
 
 const pricingSchema = new mongoose.Schema({
   category: { type: String, required: true, unique: true },
-  base: {
-    'concrete-base': { type: Number, default: 1500 },
-    'asphalt-base': { type: Number, default: 1200 },
-    'compacted-soil': { type: Number, default: 800 }
+  
+  // Subbase costs per sq meter
+  subbase: {
+    concrete: { type: Number, default: 1500 },
+    asphalt: { type: Number, default: 1200 }
   },
+  
+  // Edgewall cost per meter
+  edgewall: { type: Number, default: 800 },
+  
+  // Drainage cost per meter
+  drainage: { type: Number, default: 450 },
+  
+  // Fencing costs per meter
+  fencing: {
+    chainlink: { type: Number, default: 1200 },
+    metal: { type: Number, default: 1800 },
+    garnware: { type: Number, default: 2200 },
+    aluminium: { type: Number, default: 2800 }
+  },
+  
+  // Flooring costs per sq meter
   flooring: {
-    // Sports Specific Flooring
-    'synthetic-turf': { type: Number, default: 2500 },
-    'natural-grass': { type: Number, default: 1000 },
-    'clay-court': { type: Number, default: 1800 },
-    'acrylic-surface': { type: Number, default: 2200 },
-    'concrete-flooring': { type: Number, default: 1200 },
-    'wooden-flooring': { type: Number, default: 3500 },
-    'pvc-flooring': { type: Number, default: 2800 },
-    'rubber-flooring': { type: Number, default: 3200 },
-    'polyurethane-track': { type: Number, default: 4000 },
-    'epoxy-coating': { type: Number, default: 1800 }
+    wooden: { type: Number, default: 3500 },
+    pvc: { type: Number, default: 2800 },
+    acrylic: { type: Number, default: 2200 },
+    rubber: { type: Number, default: 3200 }
   },
+  
+  // Lighting costs
+  lighting: {
+    standard: { type: Number, default: 5000 },
+    neon: { type: Number, default: 8000 },
+    antiglare: { type: Number, default: 6500 },
+    long: { type: Number, default: 7200 }
+  },
+  
+  // Equipment costs
   equipment: {
     // Basketball
     'basketball-hoop': { type: Number, default: 15000 },
     'basketball-backboard': { type: Number, default: 8000 },
-    'basketball-poles': { type: Number, default: 12000 },
-    
-    // Badminton
-    'badminton-posts': { type: Number, default: 8000 },
-    'badminton-net': { type: Number, default: 2000 },
-    
-    // Box Cricket
-    'cricket-net': { type: Number, default: 25000 },
-    'cricket-matting': { type: Number, default: 15000 },
-    'cricket-stumps': { type: Number, default: 5000 },
-    
     // Football
     'football-goalpost': { type: Number, default: 25000 },
-    'football-net': { type: Number, default: 5000 },
-    
     // Tennis
     'tennis-net': { type: Number, default: 15000 },
-    'tennis-posts': { type: Number, default: 20000 },
-    
+    // Badminton
+    'badminton-net': { type: Number, default: 8000 },
+    'badminton-posts': { type: Number, default: 12000 },
+    // Cricket
+    'cricket-stumps': { type: Number, default: 5000 },
     // Volleyball
-    'volleyball-posts': { type: Number, default: 12000 },
-    'volleyball-net': { type: Number, default: 3000 },
-    
-    // Pickleball
-    'pickleball-net': { type: Number, default: 6000 },
-    'pickleball-posts': { type: Number, default: 10000 },
-    
-    // Running Track
-    'track-lane-marking': { type: Number, default: 5000 },
-    'starting-blocks': { type: Number, default: 8000 }
+    'volleyball-net': { type: Number, default: 10000 },
+    // Generic
+    scoreboard: { type: Number, default: 20000 },
+    seating: { type: Number, default: 15000 }
   },
-  additionalFeatures: {
-    'drainage-system': { type: Number, default: 800 },
-    'chain-link-fencing': { type: Number, default: 1200 },
-    'welded-mesh-fencing': { type: Number, default: 1500 },
-    'pvc-fencing': { type: Number, default: 2000 },
-    'led-floodlights': { type: Number, default: 5000 },
-    'metal-halide': { type: Number, default: 3000 },
-    'solar-lights': { type: Number, default: 8000 },
-    'steel-shed': { type: Number, default: 2000 },
-    'fabric-shed': { type: Number, default: 1500 },
-    'permanent-structure': { type: Number, default: 3500 }
-  },
-  courtSizes: { type: Object, default: courtSizes }
+  
+  // Court sizes
+  courtSizes: {
+    basketball: { type: courtSizesSchema, default: { standard: 420, custom: 0, recreational: 0 } },
+    badminton: { type: courtSizesSchema, default: { standard: 81.74, custom: 0, recreational: 0 } },
+    boxcricket: { type: courtSizesSchema, default: { standard: 750, custom: 0, recreational: 0 } },
+    football: { type: courtSizesSchema, default: { standard: 7140, custom: 0, recreational: 0 } },
+    tennis: { type: courtSizesSchema, default: { standard: 260, custom: 0, recreational: 0 } },
+    volleyball: { type: courtSizesSchema, default: { standard: 162, custom: 0, recreational: 0 } },
+    pickleball: { type: courtSizesSchema, default: { standard: 65, custom: 0, recreational: 0 } }
+  }
 });
 
 module.exports = mongoose.model('Pricing', pricingSchema);

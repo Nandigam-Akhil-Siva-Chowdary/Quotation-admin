@@ -3,19 +3,39 @@ import axios from 'axios';
 import { jsPDF } from 'jspdf';
 
 const QuotationSummary = ({ formData, prevStep, updateData }) => {
-  const [clientInfo, setClientInfo] = useState({
-    name: '',
-    email: '',
-    phone: '',
-    address: ''
-  });
   const [quotation, setQuotation] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [pricingData, setPricingData] = useState(null);
 
+  // Safe data access function
+  const getSafeValue = (obj, path, defaultValue) => {
+    return path.split('.').reduce((acc, part) => acc && acc[part], obj) || defaultValue;
+  };
+
+  // Initialize safe form data
+  const safeFormData = {
+    projectInfo: getSafeValue(formData, 'projectInfo', {
+      area: 260,
+      perimeter: 0,
+      sports: [],
+      constructionType: 'standard',
+      sport: '',
+      unit: 'meters',
+      length: 0,
+      width: 0
+    }),
+    requirements: getSafeValue(formData, 'requirements', {
+      subbase: { type: '', edgewall: false, drainage: { required: false, slope: 0 } },
+      flooring: { type: '', area: 260 },
+      fencing: { required: false, type: '', length: 0 },
+      lighting: { required: false, type: 'standard', poles: 0, lightsPerPole: 2 },
+      equipment: []
+    }),
+    clientInfo: getSafeValue(formData, 'clientInfo', {})
+  };
+
   useEffect(() => {
-    // Fetch pricing data for display
     const fetchPricing = async () => {
       try {
         const response = await axios.get('http://localhost:5000/api/pricing');
@@ -27,13 +47,6 @@ const QuotationSummary = ({ formData, prevStep, updateData }) => {
     fetchPricing();
   }, []);
 
-  const handleClientInfoChange = (e) => {
-    setClientInfo({
-      ...clientInfo,
-      [e.target.name]: e.target.value
-    });
-  };
-
   const formatIndianRupees = (amount) => {
     return new Intl.NumberFormat('en-IN', {
       style: 'currency',
@@ -43,25 +56,32 @@ const QuotationSummary = ({ formData, prevStep, updateData }) => {
   };
 
   const validateForm = () => {
+    const clientInfo = safeFormData.clientInfo;
+    
     if (!clientInfo.name?.trim()) {
-      setError('Please enter your name');
+      setError('Please complete client information in the first step');
       return false;
     }
     if (!clientInfo.email?.trim()) {
-      setError('Please enter your email');
+      setError('Please complete client information in the first step');
       return false;
     }
     if (!clientInfo.phone?.trim()) {
-      setError('Please enter your phone number');
+      setError('Please complete client information in the first step');
       return false;
     }
     if (!clientInfo.address?.trim()) {
-      setError('Please enter your address');
+      setError('Please complete client information in the first step');
+      return false;
+    }
+    if (!clientInfo.purpose?.trim()) {
+      setError('Please complete client information in the first step');
       return false;
     }
     
-    if (!formData.requirements?.base?.type || !formData.requirements?.flooring?.type) {
-      setError('Construction requirements are incomplete. Please go back and select base and flooring types.');
+    // Check for subbase and flooring types
+    if (!safeFormData.requirements.subbase.type || !safeFormData.requirements.flooring.type) {
+      setError('Construction requirements are incomplete. Please go back and select subbase and flooring types.');
       return false;
     }
 
@@ -78,52 +98,30 @@ const QuotationSummary = ({ formData, prevStep, updateData }) => {
     setError('');
     
     try {
-      // Send the form data directly - backend will calculate pricing based on requirements
       const completeFormData = {
-        clientInfo: {
-          name: clientInfo.name.trim(),
-          email: clientInfo.email.trim(),
-          phone: clientInfo.phone.trim(),
-          address: clientInfo.address.trim()
-        },
-        projectInfo: {
-          sport: formData.projectInfo?.sport || '',
-          constructionType: formData.projectInfo?.constructionType || 'standard',
-          courtSize: formData.projectInfo?.courtSize || 'standard',
-          customArea: formData.projectInfo?.customArea || 0
-        },
-        requirements: {
-          base: {
-            type: formData.requirements?.base?.type || '',
-            area: formData.requirements?.base?.area || 260
-          },
-          flooring: {
-            type: formData.requirements?.flooring?.type || '',
-            area: formData.requirements?.flooring?.area || 260
-          },
-          equipment: formData.requirements?.equipment || [],
-          additionalFeatures: formData.requirements?.additionalFeatures || {}
-        }
+        clientInfo: safeFormData.clientInfo,
+        projectInfo: safeFormData.projectInfo,
+        requirements: safeFormData.requirements
       };
 
-      console.log('Sending quotation data for dynamic pricing:', completeFormData);
+      console.log('Sending quotation data:', completeFormData);
 
       const response = await axios.post('http://localhost:5000/api/quotations', completeFormData);
       const newQuotation = response.data;
       
-      setQuotation(newQuotation);
-      updateData('clientInfo', clientInfo);
+      setQuotation(newQuotation.quotation || newQuotation);
       
-      // Automatically download PDF
-      setTimeout(() => {
-        downloadPDF(newQuotation);
-      }, 1000);
+      // Show success message
+      <div className="success-message">
+        <h2>✅ Quotation Request Submitted Successfully!</h2>
+        <p>Your quotation request has been received. Once approved by our team, we will send the detailed quotation PDF to your email address: <strong>{newQuotation.clientInfo?.email}</strong></p>
+        <p>Our team will review your requirements and get back to you within 24 hours.</p>
+      </div>
       
     } catch (error) {
       console.error('Error generating quotation:', error);
       const errorMessage = error.response?.data?.message || 'Error generating quotation. Please check your inputs and try again.';
       setError(errorMessage);
-      alert(errorMessage);
     }
     setLoading(false);
   };
@@ -238,193 +236,9 @@ const QuotationSummary = ({ formData, prevStep, updateData }) => {
       doc.setFontSize(9);
       doc.setFont('helvetica', 'normal');
       doc.text(`Proposal for ${sport.replace(/-/g, ' ').toUpperCase()} ${constructionType.toUpperCase()}`, margin, yPosition);
-      doc.text(`Area: ${quotationData.pricing.area} sq. meters`, margin, yPosition + 4);
+      doc.text(`Area: ${getSafeValue(quotationData, 'pricing.area', 0)} sq. meters`, margin, yPosition + 4);
       yPosition += 10;
 
-      // ✅ USE DYNAMIC PRICING FROM DATABASE
-      const pricing = quotationData.pricing;
-
-      // Cost Breakdown Table Header
-      checkNewPage(10);
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(9);
-      
-      doc.setFillColor(255,200,150);
-      doc.rect(margin, yPosition-4, pageWidth - (2*margin), 8, 'F');
-      
-      doc.text('Description', col1, yPosition);
-      doc.text('Qty', col2, yPosition, { align: 'center' });
-      doc.text('Price', col3, yPosition, { align: 'center' });
-      doc.text('Amount', col4, yPosition, { align: 'right' });
-      
-      yPosition += 4;
-      doc.line(margin, yPosition, pageWidth - margin, yPosition);
-      yPosition += 6;
-
-      // Add items dynamically based on selected requirements
-      const addItem = (title, qty, price, descriptionLines) => {
-        checkNewPage(20);
-        
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(9);
-        doc.text(title, col1, yPosition);
-        doc.text(qty.toString(), col2, yPosition, { align: 'center' });
-        doc.text(`${price}/-`, col3, yPosition, { align: 'center' });
-        
-        const amount = qty * price;
-        doc.text(amount.toLocaleString('en-IN') + '.00', col4, yPosition, { align: 'right' });
-        
-        yPosition += 4;
-        
-        doc.setFont('helvetica', 'normal');
-        doc.setFontSize(7);
-        
-        descriptionLines.forEach(line => {
-          checkNewPage(3);
-          const wrappedLines = doc.splitTextToSize(line, 85);
-          wrappedLines.forEach(wrappedLine => {
-            checkNewPage(3);
-            doc.text(wrappedLine, col1, yPosition);
-            yPosition += 3;
-          });
-        });
-        
-        yPosition += 5;
-        doc.line(col1, yPosition, pageWidth - margin, yPosition);
-        yPosition += 8;
-        
-        return amount;
-      };
-
-      // Base Construction
-      if (pricing.baseCost > 0) {
-        const unitPrice = Math.round(pricing.baseCost / pricing.area);
-        addItem(
-          `BASE CONSTRUCTION - ${quotationData.requirements?.base?.type || 'Standard'}`,
-          pricing.area,
-          unitPrice,
-          [
-            'Excavation work in surface excavation not exceeding 30cm depth.',
-            'Disposal of excavated earth up to 50m as directed.',
-            'Sub Grade preparation with power road roller 8-12 tonne.',
-            'WBM - Stone aggregate with 100mm thickness.',
-            'PCC flooring M-10 to M15 with 75mm thickness.'
-          ]
-        );
-      }
-
-      // Flooring System
-      if (pricing.flooringCost > 0) {
-        const unitPrice = Math.round(pricing.flooringCost / pricing.area);
-        addItem(
-          `FLOORING - ${quotationData.requirements?.flooring?.type || 'Standard'}`,
-          pricing.area,
-          unitPrice,
-          [
-            '8-Layer ITF approved acrylic system.',
-            'Layers: Primer, Resurfacer, Unirubber.',
-            'Precoat, Topcoat for protection.',
-            'High performance gameplay surface.',
-            'Make: UNICA/PRIOR/TOP FLOOR.'
-          ]
-        );
-      }
-
-      // Equipment
-      if (pricing.equipmentCost > 0) {
-        addItem(
-          'SPORTS EQUIPMENT',
-          1,
-          pricing.equipmentCost,
-          [
-            'High quality sports equipment.',
-            'Competition standard equipment.',
-            'Durable and weather resistant.'
-          ]
-        );
-      }
-
-      // Drainage System
-      if (pricing.drainageCost > 0) {
-        const unitPrice = Math.round(pricing.drainageCost / pricing.area);
-        addItem(
-          'DRAINAGE SYSTEM',
-          pricing.area,
-          unitPrice,
-          [
-            'PVC drainage pipes with slope design.',
-            'Surface and sub-surface drainage.',
-            'Prevents water logging.',
-            'Durable construction.'
-          ]
-        );
-      }
-
-      // Fencing
-      if (pricing.fencingCost > 0) {
-        addItem(
-          'FENCING SYSTEM',
-          1,
-          pricing.fencingCost,
-          [
-            `${sport.toUpperCase()} Standard Fencing.`,
-            'Galvanized steel construction.',
-            'Durable and secure.'
-          ]
-        );
-      }
-
-      // Lighting
-      if (pricing.lightingCost > 0) {
-        addItem(
-          'LIGHTING SYSTEM',
-          1,
-          pricing.lightingCost,
-          [
-            'Professional sports lighting.',
-            'Energy efficient LED system.',
-            'Competition standard illumination.'
-          ]
-        );
-      }
-
-      // Shed
-      if (pricing.shedCost > 0) {
-        addItem(
-          'SHED/COVER STRUCTURE',
-          1,
-          pricing.shedCost,
-          [
-            'Weather protection structure.',
-            'Durable construction materials.',
-            'Professional installation.'
-          ]
-        );
-      }
-
-      // Total Calculation
-      checkNewPage(25);
-      
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(10);
-      
-      doc.line(col3, yPosition, col4 + 10, yPosition);
-      yPosition += 6;
-      
-      doc.text('Total', col2, yPosition);
-      doc.text(pricing.subtotal.toLocaleString('en-IN') + '.00', col4, yPosition, { align: 'right' });
-      
-      yPosition += 7;
-      doc.text('GST@18%', col2, yPosition);
-      doc.text(pricing.gstAmount.toLocaleString('en-IN') + '.00', col4, yPosition, { align: 'right' });
-      
-      yPosition += 7;
-      doc.line(col3, yPosition, col4 + 10, yPosition);
-      yPosition += 7;
-      
-      doc.text('Grand Total', col2, yPosition);
-      doc.text(pricing.grandTotal.toLocaleString('en-IN') + '.00', col4, yPosition, { align: 'right' });
-      
       // Footer
       const addFooter = () => {
         const pageHeight = doc.internal.pageSize.height;
@@ -469,11 +283,13 @@ const QuotationSummary = ({ formData, prevStep, updateData }) => {
         <div className="success-message">
           <h2>✅ Quotation Generated Successfully!</h2>
           <p>Your quotation has been generated with dynamic pricing based on your requirements.</p>
+          <p><strong>Quotation Number:</strong> {quotation.quotationNumber}</p>
+          <p>We will send the detailed quotation to your email: <strong>{quotation.clientInfo?.email}</strong></p>
         </div>
         
         <div className="quotation-details">
           <div className="quotation-header">
-            <h3>QUOTATION #{quotation.quotationNumber}</h3>
+            <h3>QUOTATION SUMMARY</h3>
             <p>Date: {new Date(quotation.createdAt).toLocaleDateString()}</p>
           </div>
 
@@ -485,6 +301,7 @@ const QuotationSummary = ({ formData, prevStep, updateData }) => {
               <div><strong>Email:</strong> {quotation.clientInfo?.email || 'N/A'}</div>
               <div><strong>Phone:</strong> {quotation.clientInfo?.phone || 'N/A'}</div>
               <div><strong>Address:</strong> {quotation.clientInfo?.address || 'N/A'}</div>
+              <div><strong>Purpose:</strong> {quotation.clientInfo?.purpose || 'N/A'}</div>
             </div>
           </div>
 
@@ -494,77 +311,14 @@ const QuotationSummary = ({ formData, prevStep, updateData }) => {
             <div className="info-grid">
               <div><strong>Sport:</strong> {quotation.projectInfo?.sport || 'N/A'}</div>
               <div><strong>Construction Type:</strong> {quotation.projectInfo?.constructionType || 'N/A'}</div>
-              <div><strong>Court Size:</strong> {quotation.projectInfo?.courtSize || 'N/A'}</div>
-              <div><strong>Area:</strong> {quotation.pricing.area} sq. meters</div>
+              <div><strong>Area:</strong> {getSafeValue(quotation, 'pricing.area', 0)} sq. meters</div>
             </div>
           </div>
 
-          {/* ✅ DYNAMIC PRICE BREAKDOWN FROM DATABASE */}
-          <div className="section price-section">
-            <h4>Price Breakdown (Based on Your Requirements)</h4>
-            <div className="price-breakdown">
-              {quotation.pricing.baseCost > 0 && (
-                <div className="price-row">
-                  <span>Base Construction ({quotation.requirements?.base?.type || 'Standard'})</span>
-                  <span>{formatIndianRupees(quotation.pricing.baseCost)}</span>
-                </div>
-              )}
-              {quotation.pricing.flooringCost > 0 && (
-                <div className="price-row">
-                  <span>Flooring ({quotation.requirements?.flooring?.type || 'Standard'})</span>
-                  <span>{formatIndianRupees(quotation.pricing.flooringCost)}</span>
-                </div>
-              )}
-              {quotation.pricing.equipmentCost > 0 && (
-                <div className="price-row">
-                  <span>Sports Equipment</span>
-                  <span>{formatIndianRupees(quotation.pricing.equipmentCost)}</span>
-                </div>
-              )}
-              {quotation.pricing.drainageCost > 0 && (
-                <div className="price-row">
-                  <span>Drainage System</span>
-                  <span>{formatIndianRupees(quotation.pricing.drainageCost)}</span>
-                </div>
-              )}
-              {quotation.pricing.fencingCost > 0 && (
-                <div className="price-row">
-                  <span>Fencing System</span>
-                  <span>{formatIndianRupees(quotation.pricing.fencingCost)}</span>
-                </div>
-              )}
-              {quotation.pricing.lightingCost > 0 && (
-                <div className="price-row">
-                  <span>Lighting System</span>
-                  <span>{formatIndianRupees(quotation.pricing.lightingCost)}</span>
-                </div>
-              )}
-              {quotation.pricing.shedCost > 0 && (
-                <div className="price-row">
-                  <span>Shed/Cover Structure</span>
-                  <span>{formatIndianRupees(quotation.pricing.shedCost)}</span>
-                </div>
-              )}
-              <div className="price-row subtotal">
-                <span><strong>Subtotal</strong></span>
-                <span><strong>{formatIndianRupees(quotation.pricing.subtotal)}</strong></span>
-              </div>
-              <div className="price-row">
-                <span>GST (18%)</span>
-                <span>{formatIndianRupees(quotation.pricing.gstAmount)}</span>
-              </div>
-              <div className="price-row grand-total">
-                <span><strong>Grand Total</strong></span>
-                <span><strong>{formatIndianRupees(quotation.pricing.grandTotal)}</strong></span>
-              </div>
-            </div>
-          </div>
-
-          {/* Action Buttons */}
+          {/* Action Buttons - Only show download and new quotation */}
           <div className="button-group">
-            <button onClick={() => downloadPDF()} className="btn-primary">Download PDF</button>
-            <button onClick={() => window.print()} className="btn-secondary">Print</button>
-            <button onClick={() => window.location.reload()} className="btn-secondary">New Quotation</button>
+            <button onClick={() => downloadPDF()} className="btn-secondary">Download PDF</button>
+            <button onClick={() => window.location.reload()} className="btn-primary">Create New Quotation</button>
           </div>
         </div>
       </div>
@@ -573,69 +327,33 @@ const QuotationSummary = ({ formData, prevStep, updateData }) => {
 
   return (
     <div className="form-container">
-      <h2>Client Information & Quotation Summary</h2>
+      <h2>Quotation Summary</h2>
       
       {error && <div className="error-message">{error}</div>}
       
       <div className="section">
-        <h3>Client Details</h3>
-        <form>
-          <div className="form-group">
-            <label>Full Name:</label>
-            <input
-              type="text"
-              name="name"
-              value={clientInfo.name}
-              onChange={handleClientInfoChange}
-              required
-              placeholder="Enter your full name"
-            />
+        <h3>Project Overview</h3>
+        <div className="summary-details">
+          <div className="info-grid">
+            <div><strong>Client Name:</strong> {safeFormData.clientInfo.name || 'Not provided'}</div>
+            <div><strong>Email:</strong> {safeFormData.clientInfo.email || 'Not provided'}</div>
+            <div><strong>Phone:</strong> {safeFormData.clientInfo.phone || 'Not provided'}</div>
+            <div><strong>Construction Type:</strong> {safeFormData.projectInfo.constructionType || 'Not selected'}</div>
+            <div><strong>Sport:</strong> {safeFormData.projectInfo.sport || 'Not selected'}</div>
+            <div><strong>Area:</strong> {safeFormData.projectInfo.area || 0} sq. meters</div>
           </div>
-          <div className="form-group">
-            <label>Email:</label>
-            <input
-              type="email"
-              name="email"
-              value={clientInfo.email}
-              onChange={handleClientInfoChange}
-              required
-              placeholder="Enter your email address"
-            />
-          </div>
-          <div className="form-group">
-            <label>Phone:</label>
-            <input
-              type="tel"
-              name="phone"
-              value={clientInfo.phone}
-              onChange={handleClientInfoChange}
-              required
-              placeholder="Enter your phone number"
-            />
-          </div>
-          <div className="form-group">
-            <label>Address:</label>
-            <textarea
-              name="address"
-              value={clientInfo.address}
-              onChange={handleClientInfoChange}
-              required
-              placeholder="Enter your complete address"
-              rows="3"
-            />
-          </div>
-        </form>
+        </div>
       </div>
 
       <div className="button-group">
-        <button type="button" onClick={prevStep} className="btn-secondary">Back</button>
+        <button type="button" onClick={prevStep} className="btn-secondary">Back to Requirements</button>
         <button 
           type="button" 
           onClick={generateQuotation} 
           className="btn-primary"
           disabled={loading}
         >
-          {loading ? 'Generating Quotation...' : 'Generate & Download Quotation'}
+          {loading ? 'Generating Quotation...' : 'Generate Quotation'}
         </button>
       </div>
     </div>

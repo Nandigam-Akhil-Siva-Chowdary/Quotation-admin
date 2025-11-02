@@ -9,8 +9,15 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+
 // Routes
 app.use('/api/quotations', require('./routes/quotations'));
+const authRoutes = require('./routes/auth');
+app.use('/api/auth', authRoutes.router);
+app.use('/api/admin', require('./routes/admin'));
+
+
+// Simple pricing route (temporary)
 app.use('/api/pricing', require('./routes/pricing'));
 
 // MongoDB Connection

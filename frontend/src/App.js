@@ -1,12 +1,17 @@
 import React, { useState } from 'react';
 import './App.css';
+import ClientInfo from './components/ClientInfo';
 import ConstructionType from './components/ConstructionType';
 import SportSelection from './components/SportSelection';
 import Requirements from './components/Requirements';
 import QuotationSummary from './components/QuotationSummary';
+import AdminLogin from './components/AdminLogin';
+import AdminDashboard from './components/AdminDashboard';
 
 function App() {
   const [currentStep, setCurrentStep] = useState(1);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [showAdminLogin, setShowAdminLogin] = useState(false);
   const [formData, setFormData] = useState({
     clientInfo: {},
     projectInfo: {},
@@ -23,17 +28,57 @@ function App() {
     }));
   };
 
+  const handleAdminLoginClick = () => {
+    setShowAdminLogin(true);
+  };
+
+  const handleAdminLoginSuccess = () => {
+    setShowAdminLogin(false);
+    setIsAdmin(true);
+  };
+
+  const handleAdminBack = () => {
+    setShowAdminLogin(false);
+    setIsAdmin(false);
+  };
+
+  const handleUserFlow = () => {
+    setIsAdmin(false);
+    setShowAdminLogin(false);
+    setCurrentStep(1);
+  };
+
+  // Render Admin Login if showAdminLogin is true
+  if (showAdminLogin) {
+    return <AdminLogin onSuccess={handleAdminLoginSuccess} onBack={handleAdminBack} />;
+  }
+
+  // Render Admin Dashboard if isAdmin is true
+  if (isAdmin) {
+    return <AdminDashboard onBack={handleUserFlow} />;
+  }
+
   const renderStep = () => {
     switch (currentStep) {
       case 1:
+        return (
+          <ClientInfo
+            data={formData.clientInfo}
+            updateData={(data) => updateFormData('clientInfo', data)}
+            nextStep={nextStep}
+            onAdminLogin={handleAdminLoginClick}
+          />
+        );
+      case 2:
         return (
           <ConstructionType
             data={formData.projectInfo}
             updateData={(data) => updateFormData('projectInfo', data)}
             nextStep={nextStep}
+            prevStep={prevStep}
           />
         );
-      case 2:
+      case 3:
         return (
           <SportSelection
             data={formData.projectInfo}
@@ -42,7 +87,7 @@ function App() {
             prevStep={prevStep}
           />
         );
-      case 3:
+      case 4:
         return (
           <Requirements
             data={formData.requirements}
@@ -52,7 +97,7 @@ function App() {
             projectInfo={formData.projectInfo}
           />
         );
-      case 4:
+      case 5:
         return (
           <QuotationSummary
             formData={formData}
@@ -72,13 +117,18 @@ function App() {
           <h1>NEXORA GROUP</h1>
           <p>Sports Infrastructure Solutions</p>
         </div>
-        <h2>Sports Ground Construction Quotation</h2>
-        <div className="progress-bar">
-          <div className={`step ${currentStep >= 1 ? 'active' : ''}`}>Construction Type</div>
-          <div className={`step ${currentStep >= 2 ? 'active' : ''}`}>Sport Selection</div>
-          <div className={`step ${currentStep >= 3 ? 'active' : ''}`}>Requirements</div>
-          <div className={`step ${currentStep >= 4 ? 'active' : ''}`}>Quotation</div>
-        </div>
+        {!isAdmin && currentStep <= 4 && (
+          <>
+            <h2>Sports Ground Construction Quotation</h2>
+            <div className="progress-bar">
+              <div className={`step ${currentStep >= 1 ? 'active' : ''}`}>Client Info</div>
+              <div className={`step ${currentStep >= 2 ? 'active' : ''}`}>Construction Type</div>
+              <div className={`step ${currentStep >= 3 ? 'active' : ''}`}>Sports Selection</div>
+              <div className={`step ${currentStep >= 4 ? 'active' : ''}`}>Requirements</div>
+              <div className={`step ${currentStep >= 5 ? 'active' : ''}`}>Summary</div>
+            </div>
+          </>
+        )}
       </header>
       <main>
         {renderStep()}
