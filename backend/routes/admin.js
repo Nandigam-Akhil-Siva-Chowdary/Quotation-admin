@@ -164,7 +164,10 @@ const calculatePricing = async (quotation) => {
 const generateQuotationPDF = (quotation) => {
   return new Promise((resolve, reject) => {
     try {
-      const doc = new PDFDocument({ margin: 50 });
+      const doc = new PDFDocument({ 
+        margin: 15,
+        size: 'A4'
+      });
       const buffers = [];
       
       // Collect PDF data
@@ -174,94 +177,155 @@ const generateQuotationPDF = (quotation) => {
         resolve(pdfData);
       });
 
-      // Add Header with background
-      doc.rect(0, 0, 612, 100).fill('#2c3e50');
+      // Set page dimensions
+      const pageWidth = 595.28; // A4 width in points
+      const pageHeight = 841.89; // A4 height in points
+      const margin = 15;
       
-      // Company Logo and Name
-      doc.fillColor('white')
-         .fontSize(20)
+      let yPosition = margin;
+
+      // Function to check if we need a new page
+      const checkNewPage = (spaceNeeded = 10) => {
+        if (yPosition + spaceNeeded > pageHeight - 50) {
+          doc.addPage();
+          yPosition = margin;
+          addHeader();
+          return true;
+        }
+        return false;
+      };
+
+      // Add Header function
+      const addHeader = () => {
+        // Red header background
+        doc.rect(0, 0, pageWidth, 35).fill('#f44237');
+        
+        // Company Name and Info
+        doc.fillColor('white')
+           .fontSize(16)
+           .font('Helvetica-Bold')
+           .text('NEXORA GROUP', margin + 33, 12);
+        
+        doc.fontSize(8)
+           .font('Helvetica')
+           .text('Sports Infrastructure Solutions', margin + 33, 22);
+        
+        // Contact info aligned to right
+        doc.fontSize(7)
+           .text('+91-8431322728', pageWidth - margin, 10, { align: 'right' })
+           .text('info.nexoragroup@gmail.com', pageWidth - margin, 17, { align: 'right' })
+           .text('www.nexoragroup.com', pageWidth - margin, 24, { align: 'right' });
+        
+        doc.fillColor('black');
+        yPosition = 45;
+      };
+
+      // Initial header
+      addHeader();
+
+      // Quotation title
+      doc.fontSize(12)
          .font('Helvetica-Bold')
-         .text('NEXORA GROUP', 50, 30);
+         .text('QUOTATION FOR SPORTS COURT CONSTRUCTION', pageWidth/2, yPosition, { align: 'center' });
       
-      doc.fontSize(10)
+      yPosition += 8;
+      doc.fontSize(9)
          .font('Helvetica')
-         .text('Sports Infrastructure Solutions', 50, 55);
+         .text(`Ref. No: ${quotation.quotationNumber}`, margin, yPosition)
+         .text(`Date: ${new Date(quotation.approvedAt || quotation.createdAt).toLocaleDateString('en-IN')}`, pageWidth - margin, yPosition, { align: 'right' });
       
-      // Contact info on header
-      doc.fontSize(8)
-         .text('📞 +91-8431322728', 450, 30)
-         .text('📧 info.nexoragroup@gmail.com', 450, 45)
-         .text('🌐 www.nexoragroup.com', 450, 60);
-
-      doc.fillColor('black');
-
-      // Quotation Title
-      doc.fontSize(16)
-         .font('Helvetica-Bold')
-         .text('APPROVED QUOTATION', 50, 120, { align: 'center' });
-
-      // Quotation Details
-      doc.fontSize(10)
-         .font('Helvetica')
-         .text(`Quotation Number: ${quotation.quotationNumber}`, 50, 160)
-         .text(`Date: ${new Date(quotation.approvedAt || quotation.createdAt).toLocaleDateString('en-IN')}`, 450, 160)
-         .text(`Status: APPROVED`, 50, 175);
+      yPosition += 4;
+      doc.text(`Status: APPROVED`, margin, yPosition);
 
       // Client Information Section
-      doc.fontSize(12)
-         .font('Helvetica-Bold')
-         .text('CLIENT INFORMATION', 50, 210);
-      
+      checkNewPage(20);
+      yPosition += 12;
       doc.fontSize(10)
+         .font('Helvetica-Bold')
+         .text('CLIENT DETAILS:', margin, yPosition);
+      
+      yPosition += 6;
+      doc.fontSize(9)
          .font('Helvetica')
-         .text(`Name: ${quotation.clientInfo.name}`, 50, 235)
-         .text(`Email: ${quotation.clientInfo.email}`, 50, 250)
-         .text(`Phone: ${quotation.clientInfo.phone}`, 50, 265)
-         .text(`Address: ${quotation.clientInfo.address}`, 50, 280, { width: 300 });
+         .text(`Name: ${quotation.clientInfo.name}`, margin, yPosition);
+      
+      yPosition += 4;
+      doc.text(`Email: ${quotation.clientInfo.email}`, margin, yPosition);
+      
+      yPosition += 4;
+      doc.text(`Phone: ${quotation.clientInfo.phone}`, margin, yPosition);
+      
+      yPosition += 4;
+      
+      // FIXED: Use PDFKit's text wrapping instead of splitTextToSize
+      const addressText = `Address: ${quotation.clientInfo.address}`;
+      const addressHeight = doc.heightOfString(addressText, {
+        width: 180,
+        align: 'left'
+      });
+      
+      doc.text(addressText, margin, yPosition, {
+        width: 180,
+        align: 'left'
+      });
+      
+      yPosition += addressHeight + 8;
 
       // Project Details
-      doc.fontSize(12)
+      checkNewPage(15);
+      doc.fontSize(10)
          .font('Helvetica-Bold')
-         .text('PROJECT DETAILS', 50, 320);
+         .text('PROPOSAL DETAILS:', margin, yPosition);
       
+      yPosition += 6;
       const sportNames = quotation.projectInfo.sports?.map(s => s.sport.replace(/-/g, ' ').toUpperCase()).join(', ') || 
                         (quotation.projectInfo.sport ? quotation.projectInfo.sport.replace(/-/g, ' ').toUpperCase() : 'SPORTS COURT');
       
-      doc.fontSize(10)
+      doc.fontSize(9)
          .font('Helvetica')
-         .text(`Project: ${sportNames} Construction`, 50, 345)
-         .text(`Construction Type: ${quotation.projectInfo.constructionType || 'Standard'}`, 50, 360)
-         .text(`Area: ${quotation.projectInfo.area || 0} sq. meters`, 50, 375)
-         .text(`Perimeter: ${quotation.projectInfo.perimeter || 0} meters`, 50, 390);
+         .text(`Proposal for ${sportNames} ${quotation.projectInfo.constructionType?.toUpperCase() || 'STANDARD'}`, margin, yPosition);
+      
+      yPosition += 4;
+      doc.text(`Area: ${quotation.projectInfo.area || 0} sq. meters`, margin, yPosition);
+      
+      yPosition += 4;
+      doc.text(`Perimeter: ${quotation.projectInfo.perimeter || 0} meters`, margin, yPosition);
+      
+      yPosition += 10;
 
       // Price Breakdown Table
-      doc.fontSize(12)
-         .font('Helvetica-Bold')
-         .text('PRICE BREAKDOWN', 50, 430);
-
-      let yPosition = 455;
-      const pricing = quotation.pricing || {};
-
-      // Table Headers
+      checkNewPage(50);
       doc.fontSize(10)
          .font('Helvetica-Bold')
-         .text('Description', 50, yPosition)
-         .text('Amount (₹)', 450, yPosition, { align: 'right' });
+         .text('PRICE BREAKDOWN', margin, yPosition);
       
-      yPosition += 20;
-      doc.moveTo(50, yPosition).lineTo(550, yPosition).stroke();
+      yPosition += 8;
+      
+      // Table Headers
+      doc.fontSize(9)
+         .font('Helvetica-Bold')
+         .text('Description', margin, yPosition)
+         .text('Amount (₹)', pageWidth - margin, yPosition, { align: 'right' });
+      
+      yPosition += 5;
+      doc.moveTo(margin, yPosition).lineTo(pageWidth - margin, yPosition).strokeColor('#333').stroke();
+      
+      yPosition += 8;
+      const pricing = quotation.pricing || {};
 
-      // Price Rows
+      // Price Rows function
       const addPriceRow = (description, amount) => {
+        checkNewPage(10);
         if (amount > 0) {
-          yPosition += 15;
           doc.fontSize(9)
              .font('Helvetica')
-             .text(description, 50, yPosition)
-             .text(amount.toLocaleString('en-IN'), 450, yPosition, { align: 'right' });
+             .text(description, margin, yPosition)
+             .text(amount.toLocaleString('en-IN'), pageWidth - margin, yPosition, { align: 'right' });
+          yPosition += 12;
         }
       };
 
+      // Add pricing rows
       addPriceRow('Subbase Construction', pricing.subbaseCost || 0);
       addPriceRow('Flooring System', pricing.flooringCost || 0);
       addPriceRow('Sports Equipment', pricing.equipmentCost || 0);
@@ -271,50 +335,107 @@ const generateQuotationPDF = (quotation) => {
       addPriceRow('Edgewall Construction', pricing.edgewallCost || 0);
 
       // Total Section
-      yPosition += 30;
-      doc.moveTo(50, yPosition).lineTo(550, yPosition).stroke();
+      checkNewPage(30);
+      yPosition += 5;
+      doc.moveTo(margin, yPosition).lineTo(pageWidth - margin, yPosition).strokeColor('#333').stroke();
       
-      yPosition += 15;
-      doc.fontSize(10)
+      yPosition += 10;
+      doc.fontSize(9)
          .font('Helvetica-Bold')
-         .text('Subtotal:', 350, yPosition)
-         .text((pricing.subtotal || 0).toLocaleString('en-IN'), 450, yPosition, { align: 'right' });
+         .text('Subtotal:', pageWidth - 120, yPosition)
+         .text((pricing.subtotal || 0).toLocaleString('en-IN'), pageWidth - margin, yPosition, { align: 'right' });
       
-      yPosition += 15;
-      doc.text('GST @18%:', 350, yPosition)
-         .text((pricing.gstAmount || 0).toLocaleString('en-IN'), 450, yPosition, { align: 'right' });
+      yPosition += 10;
+      doc.text('GST @18%:', pageWidth - 120, yPosition)
+         .text((pricing.gstAmount || 0).toLocaleString('en-IN'), pageWidth - margin, yPosition, { align: 'right' });
       
-      yPosition += 20;
-      doc.fontSize(12)
-         .text('GRAND TOTAL:', 350, yPosition)
-         .text((pricing.grandTotal || 0).toLocaleString('en-IN'), 450, yPosition, { align: 'right' });
+      yPosition += 12;
+      doc.moveTo(pageWidth - 150, yPosition - 2).lineTo(pageWidth - margin, yPosition - 2).strokeColor('#f44237').lineWidth(2).stroke();
+      
+      yPosition += 5;
+      doc.fontSize(11)
+         .text('GRAND TOTAL:', pageWidth - 120, yPosition)
+         .text((pricing.grandTotal || 0).toLocaleString('en-IN'), pageWidth - margin, yPosition, { align: 'right' });
 
       // Admin Notes
       if (quotation.adminNotes) {
-        yPosition += 40;
-        doc.fontSize(11)
+        checkNewPage(40);
+        yPosition += 20;
+        doc.fontSize(10)
            .font('Helvetica-Bold')
-           .text('SPECIAL NOTES:', 50, yPosition);
+           .text('SPECIAL NOTES:', margin, yPosition);
         
-        yPosition += 15;
+        yPosition += 8;
+        
+        // FIXED: Use PDFKit's text wrapping for admin notes
+        const notesHeight = doc.heightOfString(quotation.adminNotes, {
+          width: pageWidth - (2 * margin)
+        });
+        
         doc.fontSize(9)
            .font('Helvetica')
-           .text(quotation.adminNotes, 50, yPosition, { width: 500 });
+           .text(quotation.adminNotes, margin, yPosition, {
+             width: pageWidth - (2 * margin),
+             align: 'left'
+           });
+        
+        yPosition += notesHeight + 8;
       }
 
-      // Footer
-      const footerY = 750;
-      doc.rect(0, footerY, 612, 50).fill('#34495e');
+      // Terms and Conditions
+      checkNewPage(60);
+      yPosition += 20;
+      doc.fontSize(9)
+         .font('Helvetica-Bold')
+         .text('TERMS & CONDITIONS:', margin, yPosition);
       
-      doc.fillColor('white')
+      yPosition += 8;
+      const terms = [
+        '• This quotation is valid for 30 days from the date of issue',
+        '• Prices are subject to change without prior notice',
+        '• 50% advance payment required to commence work',
+        '• Balance payment upon completion of project',
+        '• Installation timeline: 4-6 weeks from advance payment',
+        '• Warranty: 1 year on materials and workmanship'
+      ];
+      
+      terms.forEach(term => {
+        checkNewPage(10);
+        doc.fontSize(8)
+           .font('Helvetica')
+           .text(term, margin + 5, yPosition);
+        yPosition += 10;
+      });
+
+      // Footer function for all pages
+      const addFooter = () => {
+        const footerY = pageHeight - 20;
+        
+        // Red footer background
+        doc.rect(0, footerY, pageWidth, 20).fill('#f44237');
+        
+        // Footer text
+        doc.fillColor('white')
+           .fontSize(7)
+           .font('Helvetica')
+           .text('NEXORA GROUP - Sports Infrastructure Solutions | Jalahalli West, Bangalore-560015', 
+                 pageWidth/2, footerY + 6, { align: 'center' })
+           .text('+91 8431322728 | info.nexoragroup@gmail.com | www.nexoragroup.com', 
+                 pageWidth/2, footerY + 13, { align: 'center' });
+      };
+
+      // Add footer to current page
+      addFooter();
+
+      // Page number (simple version since PDFKit doesn't have easy multi-page footer)
+      doc.fillColor(100, 100, 100)
          .fontSize(8)
-         .text('NEXORA GROUP - Sports Infrastructure Solutions', 50, footerY + 15)
-         .text('Jalahalli West, Bangalore 560015 | +91 8431322728', 50, footerY + 30)
-         .text('info.nexoragroup@gmail.com | www.nexoragroup.com', 50, footerY + 45);
+         .text('Page 1 of 1', pageWidth/2, pageHeight - 30, { align: 'center' });
 
       doc.end();
 
     } catch (error) {
+      console.error('❌ Error generating PDF:', error);
       reject(error);
     }
   });
