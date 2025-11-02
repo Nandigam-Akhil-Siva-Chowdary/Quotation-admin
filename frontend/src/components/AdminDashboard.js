@@ -51,7 +51,25 @@ const AdminDashboard = ({ onBack }) => {
   };
 
   const handleEditQuotation = (quotation) => {
-    setEditingQuotation(quotation);
+    // Ensure all nested objects exist before editing
+    const safeQuotation = {
+      ...quotation,
+      clientInfo: quotation.clientInfo || {},
+      projectInfo: quotation.projectInfo || {},
+      requirements: {
+        subbase: quotation.requirements?.subbase || { type: '', edgewall: false, drainage: { required: false, slope: 0 } },
+        flooring: quotation.requirements?.flooring || { type: '' },
+        fencing: quotation.requirements?.fencing || { required: false, type: '', length: 0 },
+        lighting: quotation.requirements?.lighting || { required: false, type: 'standard', poles: 0, lightsPerPole: 2 },
+        equipment: quotation.requirements?.equipment || [],
+        courtRequirements: quotation.requirements?.courtRequirements || {}
+      },
+      pricing: quotation.pricing || {
+        subbaseCost: 0, edgewallCost: 0, drainageCost: 0, fencingCost: 0,
+        flooringCost: 0, equipmentCost: 0, lightingCost: 0, subtotal: 0, gstAmount: 0, grandTotal: 0
+      }
+    };
+    setEditingQuotation(safeQuotation);
   };
 
   const handleSaveEdit = async (updatedQuotation) => {
@@ -63,9 +81,22 @@ const AdminDashboard = ({ onBack }) => {
 
       console.log('💾 Saving quotation:', updatedQuotation);
 
+      // Ensure all required fields are present
+      const sanitizedQuotation = {
+        ...updatedQuotation,
+        requirements: {
+          subbase: updatedQuotation.requirements?.subbase || { type: '', edgewall: false, drainage: { required: false, slope: 0 } },
+          flooring: updatedQuotation.requirements?.flooring || { type: '' },
+          fencing: updatedQuotation.requirements?.fencing || { required: false, type: '', length: 0 },
+          lighting: updatedQuotation.requirements?.lighting || { required: false, type: 'standard', poles: 0, lightsPerPole: 2 },
+          equipment: updatedQuotation.requirements?.equipment || [],
+          courtRequirements: updatedQuotation.requirements?.courtRequirements || {}
+        }
+      };
+
       const response = await axios.put(
         `http://localhost:5000/api/admin/quotations/${updatedQuotation._id}/edit`,
-        updatedQuotation,
+        sanitizedQuotation,
         config
       );
       
@@ -593,6 +624,25 @@ const EditQuotationModal = ({ quotation, onClose, onSave, onRefresh }) => {
   const [editData, setEditData] = useState(JSON.parse(JSON.stringify(quotation)));
   const [saving, setSaving] = useState(false);
 
+  // Ensure all nested objects exist
+  const safeEditData = {
+    ...editData,
+    clientInfo: editData.clientInfo || {},
+    projectInfo: editData.projectInfo || {},
+    requirements: {
+      subbase: editData.requirements?.subbase || { type: '', edgewall: false, drainage: { required: false, slope: 0 } },
+      flooring: editData.requirements?.flooring || { type: '' },
+      fencing: editData.requirements?.fencing || { required: false, type: '', length: 0 },
+      lighting: editData.requirements?.lighting || { required: false, type: 'standard', poles: 0, lightsPerPole: 2 },
+      equipment: editData.requirements?.equipment || [],
+      courtRequirements: editData.requirements?.courtRequirements || {}
+    },
+    pricing: editData.pricing || {
+      subbaseCost: 0, edgewallCost: 0, drainageCost: 0, fencingCost: 0,
+      flooringCost: 0, equipmentCost: 0, lightingCost: 0, subtotal: 0, gstAmount: 0, grandTotal: 0
+    }
+  };
+
   const handleChange = (section, field, value) => {
     setEditData(prev => ({
       ...prev,
@@ -623,8 +673,21 @@ const EditQuotationModal = ({ quotation, onClose, onSave, onRefresh }) => {
     }));
   };
 
+  const handleRequirementsChange = (section, field, value) => {
+    setEditData(prev => ({
+      ...prev,
+      requirements: {
+        ...prev.requirements,
+        [section]: {
+          ...prev.requirements[section],
+          [field]: value
+        }
+      }
+    }));
+  };
+
   const handleEquipmentChange = (index, field, value) => {
-    const updatedEquipment = [...editData.requirements.equipment];
+    const updatedEquipment = [...safeEditData.requirements.equipment];
     
     if (field === 'quantity' || field === 'unitCost') {
       const numValue = Number(value) || 0;
@@ -654,7 +717,20 @@ const EditQuotationModal = ({ quotation, onClose, onSave, onRefresh }) => {
   const handleSave = async () => {
     setSaving(true);
     try {
-      await onSave(editData);
+      // Ensure all required fields are present before saving
+      const sanitizedData = {
+        ...editData,
+        requirements: {
+          subbase: editData.requirements?.subbase || { type: '', edgewall: false, drainage: { required: false, slope: 0 } },
+          flooring: editData.requirements?.flooring || { type: '' },
+          fencing: editData.requirements?.fencing || { required: false, type: '', length: 0 },
+          lighting: editData.requirements?.lighting || { required: false, type: 'standard', poles: 0, lightsPerPole: 2 },
+          equipment: editData.requirements?.equipment || [],
+          courtRequirements: editData.requirements?.courtRequirements || {}
+        }
+      };
+      
+      await onSave(sanitizedData);
     } catch (error) {
       console.error('Error saving quotation:', error);
     }
@@ -664,7 +740,7 @@ const EditQuotationModal = ({ quotation, onClose, onSave, onRefresh }) => {
   const recalculateTotals = () => {
     const costFields = ['subbaseCost', 'edgewallCost', 'drainageCost', 'fencingCost', 'flooringCost', 'equipmentCost', 'lightingCost'];
     const subtotal = costFields.reduce((sum, field) => {
-      return sum + (Number(editData.pricing[field]) || 0);
+      return sum + (Number(safeEditData.pricing[field]) || 0);
     }, 0);
     
     const gstAmount = subtotal * 0.18;
@@ -701,7 +777,7 @@ const EditQuotationModal = ({ quotation, onClose, onSave, onRefresh }) => {
                 <label>Name:</label>
                 <input
                   type="text"
-                  value={editData.clientInfo?.name || ''}
+                  value={safeEditData.clientInfo?.name || ''}
                   onChange={(e) => handleClientInfoChange('name', e.target.value)}
                 />
               </div>
@@ -709,7 +785,7 @@ const EditQuotationModal = ({ quotation, onClose, onSave, onRefresh }) => {
                 <label>Email:</label>
                 <input
                   type="email"
-                  value={editData.clientInfo?.email || ''}
+                  value={safeEditData.clientInfo?.email || ''}
                   onChange={(e) => handleClientInfoChange('email', e.target.value)}
                 />
               </div>
@@ -717,7 +793,7 @@ const EditQuotationModal = ({ quotation, onClose, onSave, onRefresh }) => {
                 <label>Phone:</label>
                 <input
                   type="text"
-                  value={editData.clientInfo?.phone || ''}
+                  value={safeEditData.clientInfo?.phone || ''}
                   onChange={(e) => handleClientInfoChange('phone', e.target.value)}
                 />
               </div>
@@ -731,7 +807,7 @@ const EditQuotationModal = ({ quotation, onClose, onSave, onRefresh }) => {
                 <label>Construction Type:</label>
                 <input
                   type="text"
-                  value={editData.projectInfo?.constructionType || ''}
+                  value={safeEditData.projectInfo?.constructionType || ''}
                   onChange={(e) => handleChange('projectInfo', 'constructionType', e.target.value)}
                 />
               </div>
@@ -739,7 +815,7 @@ const EditQuotationModal = ({ quotation, onClose, onSave, onRefresh }) => {
                 <label>Area (m²):</label>
                 <input
                   type="number"
-                  value={editData.projectInfo?.area || 0}
+                  value={safeEditData.projectInfo?.area || 0}
                   onChange={(e) => handleChange('projectInfo', 'area', Number(e.target.value))}
                 />
               </div>
@@ -747,7 +823,7 @@ const EditQuotationModal = ({ quotation, onClose, onSave, onRefresh }) => {
                 <label>Perimeter (m):</label>
                 <input
                   type="number"
-                  value={editData.projectInfo?.perimeter || 0}
+                  value={safeEditData.projectInfo?.perimeter || 0}
                   onChange={(e) => handleChange('projectInfo', 'perimeter', Number(e.target.value))}
                 />
               </div>
@@ -755,9 +831,68 @@ const EditQuotationModal = ({ quotation, onClose, onSave, onRefresh }) => {
           </div>
 
           <div className="edit-section">
+            <h3>⚙️ Requirements</h3>
+            
+            {/* Subbase */}
+            <div className="requirement-edit-group">
+              <h4>Subbase</h4>
+              <div className="form-group">
+                <label>Subbase Type:</label>
+                <select
+                  value={safeEditData.requirements?.subbase?.type || ''}
+                  onChange={(e) => handleRequirementsChange('subbase', 'type', e.target.value)}
+                >
+                  <option value="">Select Subbase Type</option>
+                  <option value="concrete">Concrete</option>
+                  <option value="asphalt">Asphalt</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Flooring - FIXED: This was causing the error */}
+            <div className="requirement-edit-group">
+              <h4>Flooring</h4>
+              <div className="form-group">
+                <label>Flooring Type:</label>
+                <select
+                  value={safeEditData.requirements?.flooring?.type || ''}
+                  onChange={(e) => handleRequirementsChange('flooring', 'type', e.target.value)}
+                >
+                  <option value="">Select Flooring Type</option>
+                  <option value="acrylic">Acrylic</option>
+                  <option value="wooden">Wooden</option>
+                  <option value="pvc">PVC</option>
+                  <option value="rubber">Rubber</option>
+                  <option value="concrete">Concrete</option>
+                  <option value="synthetic-turf">Synthetic Turf</option>
+                  <option value="natural-grass">Natural Grass</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Fencing */}
+            <div className="requirement-edit-group">
+              <h4>Fencing</h4>
+              <div className="form-group">
+                <label>Fencing Type:</label>
+                <select
+                  value={safeEditData.requirements?.fencing?.type || ''}
+                  onChange={(e) => handleRequirementsChange('fencing', 'type', e.target.value)}
+                >
+                  <option value="">Select Fencing Type</option>
+                  <option value="chainlink">Chain Link</option>
+                  <option value="metal">Metal</option>
+                  <option value="garnware">Garnware</option>
+                  <option value="aluminium">Aluminium</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div className="edit-section">
             <h3>💰 Pricing Breakdown</h3>
             <div className="pricing-edit-grid">
-              {editData.pricing && Object.entries(editData.pricing)
+              {safeEditData.pricing && Object.entries(safeEditData.pricing)
                 .filter(([key]) => key !== 'subtotal' && key !== 'gstAmount' && key !== 'grandTotal')
                 .map(([key, value]) => (
                   <div key={key} className="form-group">
@@ -778,24 +913,24 @@ const EditQuotationModal = ({ quotation, onClose, onSave, onRefresh }) => {
             <div className="calculated-totals">
               <div className="total-row">
                 <strong>Subtotal:</strong>
-                <span>₹{editData.pricing?.subtotal?.toLocaleString() || 0}</span>
+                <span>₹{safeEditData.pricing?.subtotal?.toLocaleString() || 0}</span>
               </div>
               <div className="total-row">
                 <strong>GST @18%:</strong>
-                <span>₹{editData.pricing?.gstAmount?.toLocaleString() || 0}</span>
+                <span>₹{safeEditData.pricing?.gstAmount?.toLocaleString() || 0}</span>
               </div>
               <div className="total-row grand-total">
                 <strong>Grand Total:</strong>
-                <span>₹{editData.pricing?.grandTotal?.toLocaleString() || 0}</span>
+                <span>₹{safeEditData.pricing?.grandTotal?.toLocaleString() || 0}</span>
               </div>
             </div>
           </div>
 
-          {editData.requirements?.equipment?.length > 0 && (
+          {safeEditData.requirements?.equipment?.length > 0 && (
             <div className="edit-section">
               <h3>⚙️ Equipment</h3>
               <div className="equipment-edit-list">
-                {editData.requirements.equipment.map((item, index) => (
+                {safeEditData.requirements.equipment.map((item, index) => (
                   <div key={index} className="equipment-edit-item">
                     <div className="equipment-name">{item.name}</div>
                     <div className="equipment-fields">
