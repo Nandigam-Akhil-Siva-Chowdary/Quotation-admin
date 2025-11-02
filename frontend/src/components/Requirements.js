@@ -3,7 +3,6 @@ import axios from 'axios';
 
 const Requirements = ({ data, updateData, nextStep, prevStep, projectInfo }) => {
   const [courtRequirements, setCourtRequirements] = useState(data.courtRequirements || {});
-  const [equipmentLists, setEquipmentLists] = useState({});
   const [pricing, setPricing] = useState(null);
 
   useEffect(() => {
@@ -13,36 +12,34 @@ const Requirements = ({ data, updateData, nextStep, prevStep, projectInfo }) => 
         setPricing(pricingRes.data);
 
         // Fetch equipment for each selected sport
-        const equipmentPromises = projectInfo.sports.map(sport => 
-          axios.get(`http://localhost:5000/api/quotations/equipment/${sport.sport}`)
+        const equipmentPromises = projectInfo.sports.map(sportItem => 
+          axios.get(`http://localhost:5000/api/sports-config/equipment/${sportItem.sport}`)
         );
         
         const equipmentResponses = await Promise.all(equipmentPromises);
         const equipmentData = {};
         
-        projectInfo.sports.forEach((sport, index) => {
-          equipmentData[sport.sport] = equipmentResponses[index].data.map(item => ({
+        projectInfo.sports.forEach((sportItem, index) => {
+          equipmentData[sportItem.sport] = equipmentResponses[index].data.map(item => ({
             ...item,
             quantity: Number(item.quantity) || 1,
             totalCost: Number(item.unitCost) * (Number(item.quantity) || 1)
           }));
         });
         
-        setEquipmentLists(equipmentData);
-        
         // Initialize requirements for each court
         const initialRequirements = {};
-        projectInfo.sports.forEach(sport => {
-          for (let i = 0; i < sport.quantity; i++) {
-            const courtKey = `${sport.sport}-${i}`;
+        projectInfo.sports.forEach(sportItem => {
+          for (let i = 0; i < sportItem.quantity; i++) {
+            const courtKey = `${sportItem.sport}-${i}`;
             initialRequirements[courtKey] = data.courtRequirements?.[courtKey] || {
-              sport: sport.sport,
+              sport: sportItem.sport,
               courtNumber: i + 1,
               subbase: { type: '', edgewall: false, drainage: { required: false, slope: 0 } },
               flooring: { type: '', area: '' },
               fencing: { required: false, type: '', length: 0 },
               lighting: { required: false, type: 'standard', poles: 0, lightsPerPole: 2 },
-              equipment: equipmentData[sport.sport] || []
+              equipment: equipmentData[sportItem.sport] || []
             };
           }
         });
@@ -56,7 +53,7 @@ const Requirements = ({ data, updateData, nextStep, prevStep, projectInfo }) => 
     if (projectInfo.sports && projectInfo.sports.length > 0) {
       fetchData();
     }
-  }, [projectInfo.sports]);
+  }, [projectInfo.sports]); // Removed data.courtRequirements from dependencies
 
   const handleCourtChange = (courtKey, section, field, value) => {
     setCourtRequirements(prev => ({
@@ -132,7 +129,7 @@ const Requirements = ({ data, updateData, nextStep, prevStep, projectInfo }) => 
     nextStep();
   };
 
-  const getFlooringOptions = (sport) => {
+  const getFlooringOptions = (sportType) => {
     const sportFlooring = {
       'basketball': [
         { value: 'acrylic', label: 'Acrylic Surface' },
@@ -168,21 +165,20 @@ const Requirements = ({ data, updateData, nextStep, prevStep, projectInfo }) => 
       ]
     };
 
-    return sportFlooring[sport] || [
+    return sportFlooring[sportType] || [
       { value: 'concrete', label: 'Concrete Flooring' },
       { value: 'synthetic-turf', label: 'Synthetic Turf' }
     ];
   };
 
-  const getFencingOptions = (sport) => {
+  const getFencingOptions = (sportType) => {
     const sportFencing = {
       'football': 'garnware',
       'boxcricket': 'garnware',
       'badminton': 'aluminium'
     };
 
-    const defaultType = sportFencing[sport];
-    
+    // Remove unused variable and return options directly
     return [
       { value: 'chainlink', label: 'Chain Link Fencing' },
       { value: 'metal', label: 'Metal Fencing' },
@@ -191,8 +187,8 @@ const Requirements = ({ data, updateData, nextStep, prevStep, projectInfo }) => 
     ];
   };
 
-  const getLightingOptions = (sport) => {
-    if (sport === 'badminton') {
+  const getLightingOptions = (sportType) => {
+    if (sportType === 'badminton') {
       return [
         { value: 'neon', label: 'Neon Lights' },
         { value: 'antiglare', label: 'Anti-Glare Lights' },

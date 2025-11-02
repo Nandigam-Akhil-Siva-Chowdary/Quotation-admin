@@ -153,64 +153,64 @@ const QuotationSummary = ({ formData, prevStep, updateData }) => {
     setLoading(false);
   };
 
-  const downloadPDF = () => {
-    if (!quotation) return;
+  // const downloadPDF = () => {
+  //   if (!quotation) return;
     
-    const doc = new jsPDF();
+  //   const doc = new jsPDF();
     
-    // Add header
-    doc.setFillColor(44, 62, 80);
-    doc.rect(0, 0, 210, 40, 'F');
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(20);
-    doc.text('NEXORA GROUP', 105, 15, { align: 'center' });
-    doc.setFontSize(12);
-    doc.text('Sports Infrastructure Solutions', 105, 22, { align: 'center' });
+  //   // Add header
+  //   doc.setFillColor(44, 62, 80);
+  //   doc.rect(0, 0, 210, 40, 'F');
+  //   doc.setTextColor(255, 255, 255);
+  //   doc.setFontSize(20);
+  //   doc.text('NEXORA GROUP', 105, 15, { align: 'center' });
+  //   doc.setFontSize(12);
+  //   doc.text('Sports Infrastructure Solutions', 105, 22, { align: 'center' });
     
-    // Add quotation details
-    doc.setTextColor(0, 0, 0);
-    doc.setFontSize(16);
-    doc.text('QUOTATION', 105, 50, { align: 'center' });
+  //   // Add quotation details
+  //   doc.setTextColor(0, 0, 0);
+  //   doc.setFontSize(16);
+  //   doc.text('QUOTATION', 105, 50, { align: 'center' });
     
-    doc.setFontSize(10);
-    doc.text(`Quotation Number: ${quotation.quotationNumber}`, 20, 65);
-    doc.text(`Date: ${new Date().toLocaleDateString()}`, 20, 72);
+  //   doc.setFontSize(10);
+  //   doc.text(`Quotation Number: ${quotation.quotationNumber}`, 20, 65);
+  //   doc.text(`Date: ${new Date().toLocaleDateString()}`, 20, 72);
     
-    // Add client information
-    doc.setFontSize(12);
-    doc.text('Client Information:', 20, 85);
-    doc.setFontSize(10);
-    doc.text(`Name: ${quotation.clientInfo.name}`, 20, 95);
-    doc.text(`Email: ${quotation.clientInfo.email}`, 20, 102);
-    doc.text(`Phone: ${quotation.clientInfo.phone}`, 20, 109);
-    doc.text(`Address: ${quotation.clientInfo.address}`, 20, 116);
+  //   // Add client information
+  //   doc.setFontSize(12);
+  //   doc.text('Client Information:', 20, 85);
+  //   doc.setFontSize(10);
+  //   doc.text(`Name: ${quotation.clientInfo.name}`, 20, 95);
+  //   doc.text(`Email: ${quotation.clientInfo.email}`, 20, 102);
+  //   doc.text(`Phone: ${quotation.clientInfo.phone}`, 20, 109);
+  //   doc.text(`Address: ${quotation.clientInfo.address}`, 20, 116);
     
-    // Add pricing
-    let yPosition = 140;
-    doc.setFontSize(12);
-    doc.text('Pricing Breakdown:', 20, yPosition);
+  //   // Add pricing
+  //   let yPosition = 140;
+  //   doc.setFontSize(12);
+  //   doc.text('Pricing Breakdown:', 20, yPosition);
     
-    yPosition += 10;
-    if (quotation.pricing) {
-      Object.entries(quotation.pricing).forEach(([key, value]) => {
-        if (value > 0 && key !== 'subtotal' && key !== 'gstAmount' && key !== 'grandTotal') {
-          const label = key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
-          doc.text(`${label}: ₹${value.toLocaleString()}`, 30, yPosition);
-          yPosition += 7;
-        }
-      });
+  //   yPosition += 10;
+  //   if (quotation.pricing) {
+  //     Object.entries(quotation.pricing).forEach(([key, value]) => {
+  //       if (value > 0 && key !== 'subtotal' && key !== 'gstAmount' && key !== 'grandTotal') {
+  //         const label = key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
+  //         doc.text(`${label}: ₹${value.toLocaleString()}`, 30, yPosition);
+  //         yPosition += 7;
+  //       }
+  //     });
       
-      doc.text(`Subtotal: ₹${quotation.pricing.subtotal.toLocaleString()}`, 30, yPosition);
-      yPosition += 7;
-      doc.text(`GST (18%): ₹${quotation.pricing.gstAmount.toLocaleString()}`, 30, yPosition);
-      yPosition += 7;
-      doc.setFontSize(14);
-      doc.text(`Grand Total: ₹${quotation.pricing.grandTotal.toLocaleString()}`, 30, yPosition);
-    }
+  //     doc.text(`Subtotal: ₹${quotation.pricing.subtotal.toLocaleString()}`, 30, yPosition);
+  //     yPosition += 7;
+  //     doc.text(`GST (18%): ₹${quotation.pricing.gstAmount.toLocaleString()}`, 30, yPosition);
+  //     yPosition += 7;
+  //     doc.setFontSize(14);
+  //     doc.text(`Grand Total: ₹${quotation.pricing.grandTotal.toLocaleString()}`, 30, yPosition);
+  //   }
     
-    // Save the PDF
-    doc.save(`quotation-${quotation.quotationNumber}.pdf`);
-  };
+  //   // Save the PDF
+  //   doc.save(`quotation-${quotation.quotationNumber}.pdf`);
+  // };
 
   return (
     <div className="form-container">
@@ -236,9 +236,9 @@ const QuotationSummary = ({ formData, prevStep, updateData }) => {
           </div>
           
           <div className="button-group">
-            <button type="button" onClick={downloadPDF} className="btn-primary">
+            {/* <button type="button" onClick={downloadPDF} className="btn-primary">
               📄 Download PDF
-            </button>
+            </button> */}
             <button type="button" onClick={() => window.location.reload()} className="btn-secondary">
               🏠 Create New Quotation
             </button>
