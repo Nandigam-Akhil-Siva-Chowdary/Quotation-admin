@@ -1,252 +1,194 @@
-const express = require('express');
-const router = express.Router();
-const Quotation = require('../models/Quotation');
-const Pricing = require('../models/Pricing');
+const mongoose = require('mongoose');
 
-// Get sports configuration
-router.get('/sports-config', (req, res) => {
-  const sportsConfig = {
-    sports: [
-      { id: 'basketball', name: 'Basketball Court', image: '🏀', fencing: 'chainlink' },
-      { id: 'badminton', name: 'Badminton Court', image: '🏸', fencing: 'aluminium' },
-      { id: 'boxcricket', name: 'Box Cricket', image: '🏏', fencing: 'garnware' },
-      { id: 'football', name: 'Football Field', image: '⚽', fencing: 'garnware' },
-      { id: 'tennis', name: 'Tennis Court', image: '🎾', fencing: 'chainlink' },
-      { id: 'volleyball', name: 'Volleyball Court', image: '🏐', fencing: 'chainlink' },
-      { id: 'pickleball', name: 'Pickleball Court', image: '🎾', fencing: 'chainlink' }
-    ]
-  };
-  res.json(sportsConfig);
+const sportSchema = new mongoose.Schema({
+  sport: { type: String, required: true },
+  quantity: { type: Number, default: 1 }
 });
 
-// Get equipment for specific sport
-router.get('/equipment/:sport', async (req, res) => {
-  try {
-    const pricing = await Pricing.findOne({ category: 'default' });
-    if (!pricing) {
-      return res.status(404).json({ message: 'Pricing data not found' });
+const equipmentSchema = new mongoose.Schema({
+  name: { type: String, required: true },
+  quantity: { type: Number, default: 1 },
+  unitCost: { type: Number, default: 0 },
+  totalCost: { type: Number, default: 0 }
+});
+
+// New schema for individual court requirements
+const courtRequirementSchema = new mongoose.Schema({
+  sport: { type: String, required: true },
+  courtNumber: { type: Number, required: true },
+  length: { type: Number, default: 0 },
+  width: { type: Number, default: 0 },
+  area: { type: Number, default: 0 },
+  perimeter: { type: Number, default: 0 },
+  subbase: {
+    type: { type: String },
+    edgewall: { type: Boolean, default: false },
+    drainage: { 
+      required: { type: Boolean, default: false },
+      slope: { type: Number, default: 0 }
     }
-
-    const sport = req.params.sport;
-    
-    const equipmentMap = {
-      'basketball': [
-        { id: 'basketball-hoop', name: 'Basketball Hoop System', quantity: 2 },
-        { id: 'basketball-backboard', name: 'Backboard', quantity: 2 }
-      ],
-      'badminton': [
-        { id: 'badminton-posts', name: 'Badminton Posts', quantity: 2 },
-        { id: 'badminton-net', name: 'Badminton Net', quantity: 1 }
-      ],
-      'boxcricket': [
-        { id: 'cricket-stumps', name: 'Cricket Stumps', quantity: 3 }
-      ],
-      'football': [
-        { id: 'football-goalpost', name: 'Football Goalpost', quantity: 2 }
-      ],
-      'tennis': [
-        { id: 'tennis-net', name: 'Tennis Net', quantity: 1 }
-      ],
-      'volleyball': [
-        { id: 'volleyball-net', name: 'Volleyball Net', quantity: 1 }
-      ],
-      'pickleball': [
-        { id: 'volleyball-net', name: 'Pickleball Net', quantity: 1 }
-      ]
-    };
-
-    const equipment = equipmentMap[sport] || [];
-    const equipmentWithPricing = equipment.map(item => ({
-      ...item,
-      unitCost: pricing.equipment[item.id] || 0,
-      totalCost: ((pricing.equipment[item.id] || 0) * (item.quantity || 1))
-    }));
-
-    res.json(equipmentWithPricing);
-  } catch (error) {
-    console.error('Error fetching equipment:', error);
-    res.status(500).json({ message: error.message });
+  },
+  fencing: {
+    required: { type: Boolean, default: false },
+    type: { type: String },
+    length: { type: Number }
+  },
+  flooring: {
+    type: { type: String }
+  },
+  equipment: [equipmentSchema],
+  lighting: {
+    required: { type: Boolean, default: false },
+    type: { type: String, default: 'standard' },
+    poles: { type: Number, default: 0 },
+    lightsPerPole: { type: Number, default: 2 }
   }
 });
 
-// Create new quotation
-router.post('/', async (req, res) => {
-  try {
-    const { clientInfo, projectInfo, requirements } = req.body;
-    
-    // Validate required fields
-    if (!clientInfo || !clientInfo.name || !clientInfo.email || !clientInfo.phone) {
-      return res.status(400).json({ message: 'Please complete all client information' });
+const quotationSchema = new mongoose.Schema({
+  clientInfo: {
+    name: { type: String, required: true },
+    email: { type: String, required: true },
+    phone: { type: String, required: true },
+    address: { type: String, required: true },
+    purpose: { type: String, required: true }
+  },
+  
+  projectInfo: {
+    constructionType: { type: String, required: true },
+    unit: { type: String, default: 'meters' },
+    length: { type: Number, default: 0 },
+    width: { type: Number, default: 0 },
+    area: { type: Number, default: 0 },
+    perimeter: { type: Number, default: 0 },
+    sports: [sportSchema]
+  },
+  
+  requirements: {
+    // Keep existing structure for backward compatibility
+    subbase: {
+      type: { type: String },
+      edgewall: { type: Boolean, default: false },
+      drainage: { 
+        required: { type: Boolean, default: false },
+        slope: { type: Number, default: 0 }
+      }
+    },
+    fencing: {
+      required: { type: Boolean, default: false },
+      type: { type: String },
+      length: { type: Number }
+    },
+    flooring: {
+      type: { type: String }
+    },
+    equipment: [equipmentSchema],
+    lighting: {
+      required: { type: Boolean, default: false },
+      type: { type: String, default: 'standard' },
+      poles: { type: Number, default: 0 },
+      lightsPerPole: { type: Number, default: 2 }
+    },
+    // Add courtRequirements for multiple courts
+    courtRequirements: {
+      type: Map,
+      of: courtRequirementSchema,
+      default: {}
     }
-    
-    if (!projectInfo || !projectInfo.constructionType) {
-      return res.status(400).json({ message: 'Please provide project information' });
-    }
-    
-    // Create quotation
-    const quotation = new Quotation({
-      clientInfo,
-      projectInfo,
-      requirements
-    });
-    
-    // Calculate pricing
-    await calculatePricing(quotation);
-    
-    await quotation.save();
-    
-    res.status(201).json({
-      message: 'Thank you for your interest! Within 24 hours, we will send the quotation to your email.',
-      quotationNumber: quotation.quotationNumber,
-      quotation
-    });
-    
-  } catch (error) {
-    console.error('Error creating quotation:', error);
-    res.status(400).json({ message: error.message });
-  }
+  },
+  
+  pricing: {
+    subbaseCost: { type: Number, default: 0 },
+    edgewallCost: { type: Number, default: 0 },
+    drainageCost: { type: Number, default: 0 },
+    fencingCost: { type: Number, default: 0 },
+    flooringCost: { type: Number, default: 0 },
+    equipmentCost: { type: Number, default: 0 },
+    lightingCost: { type: Number, default: 0 },
+    subtotal: { type: Number, default: 0 },
+    gstAmount: { type: Number, default: 0 },
+    grandTotal: { type: Number, default: 0 }
+  },
+  
+  quotationNumber: { type: String, unique: true },
+  status: { type: String, default: 'pending' },
+  adminNotes: { type: String },
+  approvedAt: { type: Date },
+  approvedBy: { type: String },
+  rejectedAt: { type: Date },
+  rejectedBy: { type: String },
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now }
 });
 
-// Pricing calculation function
-const calculatePricing = async (quotation) => {
-  const pricing = await Pricing.findOne({ category: 'default' });
-  if (!pricing) throw new Error('Pricing data not found');
+// Calculate dimensions before saving
+quotationSchema.pre('save', function(next) {
+  this.updatedAt = Date.now();
   
-  const { projectInfo, requirements } = quotation;
+  if (!this.quotationNumber) {
+    const timestamp = Date.now().toString().slice(-6);
+    const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+    this.quotationNumber = `NXR${timestamp}${random}`;
+  }
   
-  // Reset pricing with safe defaults
-  quotation.pricing = {
-    subbaseCost: 0,
-    edgewallCost: 0,
-    drainageCost: 0,
-    fencingCost: 0,
-    flooringCost: 0,
-    equipmentCost: 0,
-    lightingCost: 0,
-    subtotal: 0,
-    gstAmount: 0,
-    grandTotal: 0
-  };
+  // Calculate area and perimeter for project info - FIXED
+  if (this.projectInfo.length && this.projectInfo.width) {
+    let area = this.projectInfo.length * this.projectInfo.width;
+    let perimeter = 2 * (this.projectInfo.length + this.projectInfo.width);
+    
+    // Convert to meters if input was in feet
+    if (this.projectInfo.unit === 'feet') {
+      area = area * 0.092903; // sq feet to sq meters
+      perimeter = perimeter * 0.3048; // feet to meters
+    }
+    
+    this.projectInfo.area = Math.round(area * 100) / 100;
+    this.projectInfo.perimeter = Math.round(perimeter * 100) / 100;
+  }
   
-  // Safe calculation functions
-  const safeMultiply = (a, b) => (Number(a) || 0) * (Number(b) || 0);
-  
-  // Check if we have multiple courts or single court requirements
-  if (requirements.courtRequirements) {
-    // Multiple courts - calculate for each court
-    Object.values(requirements.courtRequirements).forEach(court => {
-      // Use court-specific area/perimeter or fallback to project info
-      const area = Number(court.area) || Number(projectInfo.area) || 0;
-      const perimeter = Number(court.perimeter) || Number(projectInfo.perimeter) || 0;
-      
-      // Subbase cost
-      if (court.subbase && court.subbase.type && pricing.subbase[court.subbase.type]) {
-        quotation.pricing.subbaseCost += safeMultiply(area, pricing.subbase[court.subbase.type]);
-      }
-      
-      // Edgewall cost
-      if (court.subbase && court.subbase.edgewall) {
-        quotation.pricing.edgewallCost += safeMultiply(perimeter, pricing.edgewall);
-      }
-      
-      // Drainage cost
-      if (court.subbase && court.subbase.drainage && court.subbase.drainage.required) {
-        const drainageLength = Math.ceil(perimeter / 4.5);
-        quotation.pricing.drainageCost += safeMultiply(drainageLength, pricing.drainage);
-      }
-      
-      // Fencing cost
-      if (court.fencing && court.fencing.required && court.fencing.type) {
-        quotation.pricing.fencingCost += safeMultiply(perimeter, pricing.fencing[court.fencing.type]);
-      }
-      
-      // Flooring cost
-      if (court.flooring && court.flooring.type && pricing.flooring[court.flooring.type]) {
-        quotation.pricing.flooringCost += safeMultiply(area, pricing.flooring[court.flooring.type]);
-      }
-      
-      // Equipment cost
-      if (court.equipment && Array.isArray(court.equipment)) {
-        quotation.pricing.equipmentCost += court.equipment.reduce((total, item) => {
-          return total + (Number(item.totalCost) || 0);
-        }, 0);
-      }
-      
-      // Lighting cost
-      if (court.lighting && court.lighting.required) {
-        const poleSpacing = 9.14;
-        const poles = Math.ceil(perimeter / poleSpacing);
-        const lightsPerPole = Number(court.lighting.lightsPerPole) || 2;
-        const lightCostPerUnit = pricing.lighting[court.lighting.type] || pricing.lighting.standard;
+  // Calculate individual court dimensions if courtRequirements exist
+  if (this.requirements.courtRequirements) {
+    const courtRequirementsMap = this.requirements.courtRequirements;
+    
+    courtRequirementsMap.forEach((court, courtKey) => {
+      // If court has its own length/width, calculate area and perimeter
+      if (court.length && court.width) {
+        let courtArea = court.length * court.width;
+        let courtPerimeter = 2 * (court.length + court.width);
         
-        quotation.pricing.lightingCost += poles * lightsPerPole * lightCostPerUnit;
-        court.lighting.poles = poles;
+        // Convert to meters if input was in feet
+        if (this.projectInfo.unit === 'feet') {
+          courtArea = courtArea * 0.092903;
+          courtPerimeter = courtPerimeter * 0.3048;
+        }
+        
+        court.area = Math.round(courtArea * 100) / 100;
+        court.perimeter = Math.round(courtPerimeter * 100) / 100;
+      } else {
+        // Use project-level dimensions as fallback
+        court.area = this.projectInfo.area || 0;
+        court.perimeter = this.projectInfo.perimeter || 0;
       }
     });
-  } else {
-    // Single court - use original calculation (backward compatibility)
-    const area = Number(projectInfo.area) || 0;
-    const perimeter = Number(projectInfo.perimeter) || 0;
-    
-    // Subbase cost
-    if (requirements.subbase && requirements.subbase.type && pricing.subbase[requirements.subbase.type]) {
-      quotation.pricing.subbaseCost = safeMultiply(area, pricing.subbase[requirements.subbase.type]);
-    }
-    
-    // Edgewall cost
-    if (requirements.subbase && requirements.subbase.edgewall) {
-      quotation.pricing.edgewallCost = safeMultiply(perimeter, pricing.edgewall);
-    }
-    
-    // Drainage cost
-    if (requirements.subbase && requirements.subbase.drainage && requirements.subbase.drainage.required) {
-      const drainageLength = Math.ceil(perimeter / 4.5);
-      quotation.pricing.drainageCost = safeMultiply(drainageLength, pricing.drainage);
-    }
-    
-    // Fencing cost
-    if (requirements.fencing && requirements.fencing.required && requirements.fencing.type) {
-      quotation.pricing.fencingCost = safeMultiply(perimeter, pricing.fencing[requirements.fencing.type]);
-    }
-    
-    // Flooring cost
-    if (requirements.flooring && requirements.flooring.type && pricing.flooring[requirements.flooring.type]) {
-      quotation.pricing.flooringCost = safeMultiply(area, pricing.flooring[requirements.flooring.type]);
-    }
-    
-    // Equipment cost
-    if (requirements.equipment && Array.isArray(requirements.equipment)) {
-      quotation.pricing.equipmentCost = requirements.equipment.reduce((total, item) => {
-        return total + (Number(item.totalCost) || 0);
-      }, 0);
-    }
-    
-    // Lighting cost
-    if (requirements.lighting && requirements.lighting.required) {
-      const poleSpacing = 9.14;
-      const poles = Math.ceil(perimeter / poleSpacing);
-      const lightsPerPole = Number(requirements.lighting.lightsPerPole) || 2;
-      const lightCostPerUnit = pricing.lighting[requirements.lighting.type] || pricing.lighting.standard;
-      
-      quotation.pricing.lightingCost = poles * lightsPerPole * lightCostPerUnit;
-      requirements.lighting.poles = poles;
-    }
   }
   
-  // Calculate totals safely
-  const costFields = ['subbaseCost', 'edgewallCost', 'drainageCost', 'fencingCost', 'flooringCost', 'equipmentCost', 'lightingCost'];
-  quotation.pricing.subtotal = costFields.reduce((sum, field) => {
-    const value = Number(quotation.pricing[field]) || 0;
-    return sum + value;
-  }, 0);
-  
-  quotation.pricing.gstAmount = quotation.pricing.subtotal * 0.18;
-  quotation.pricing.grandTotal = quotation.pricing.subtotal + quotation.pricing.gstAmount;
-  
-  // Ensure all values are numbers
-  Object.keys(quotation.pricing).forEach(key => {
-    quotation.pricing[key] = Number(quotation.pricing[key]) || 0;
-  });
+  next();
+});
+
+// Helper method to get all court requirements as array
+quotationSchema.methods.getCourtRequirementsArray = function() {
+  if (!this.requirements.courtRequirements) {
+    return [];
+  }
+  return Array.from(this.requirements.courtRequirements.values());
 };
 
-module.exports = router;
+// Helper method to add a court requirement
+quotationSchema.methods.addCourtRequirement = function(courtKey, courtData) {
+  if (!this.requirements.courtRequirements) {
+    this.requirements.courtRequirements = new Map();
+  }
+  this.requirements.courtRequirements.set(courtKey, courtData);
+};
+
+module.exports = mongoose.model('Quotation', quotationSchema);

@@ -78,4 +78,7 @@ const pricingSchema = new mongoose.Schema({
   }
 });
 
-module.exports = mongoose.model('Pricing', pricingSchema);
+// Fix: Check if model already exists before compiling
+const Pricing = mongoose.models.Pricing || mongoose.model('Pricing', pricingSchema);
+
+module.exports = Pricing;

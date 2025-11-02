@@ -17,4 +17,7 @@ userSchema.methods.correctPassword = async function(candidatePassword, userPassw
   return await bcrypt.compare(candidatePassword, userPassword);
 };
 
-module.exports = mongoose.model('User', userSchema);
+// Fix: Check if model already exists before compiling
+const User = mongoose.models.User || mongoose.model('User', userSchema);
+
+module.exports = User;

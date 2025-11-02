@@ -16,6 +16,8 @@ const equipmentSchema = new mongoose.Schema({
 const courtRequirementSchema = new mongoose.Schema({
   sport: { type: String, required: true },
   courtNumber: { type: Number, required: true },
+  length: { type: Number, default: 0 },
+  width: { type: Number, default: 0 },
   area: { type: Number, default: 0 },
   perimeter: { type: Number, default: 0 },
   subbase: {
@@ -111,6 +113,10 @@ const quotationSchema = new mongoose.Schema({
   quotationNumber: { type: String, unique: true },
   status: { type: String, default: 'pending' },
   adminNotes: { type: String },
+  approvedAt: { type: Date },
+  approvedBy: { type: String },
+  rejectedAt: { type: Date },
+  rejectedBy: { type: String },
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }
 });
@@ -125,18 +131,20 @@ quotationSchema.pre('save', function(next) {
     this.quotationNumber = `NXR${timestamp}${random}`;
   }
   
-  // Calculate area and perimeter for project info
-  let area = this.projectInfo.length * this.projectInfo.width;
-  let perimeter = 2 * (this.projectInfo.length + this.projectInfo.width);
-  
-  // Convert to meters if input was in feet
-  if (this.projectInfo.unit === 'feet') {
-    area = area * 0.092903; // sq feet to sq meters
-    perimeter = perimeter * 0.3048; // feet to meters
+  // Calculate area and perimeter for project info - FIXED
+  if (this.projectInfo.length && this.projectInfo.width) {
+    let area = this.projectInfo.length * this.projectInfo.width;
+    let perimeter = 2 * (this.projectInfo.length + this.projectInfo.width);
+    
+    // Convert to meters if input was in feet
+    if (this.projectInfo.unit === 'feet') {
+      area = area * 0.092903; // sq feet to sq meters
+      perimeter = perimeter * 0.3048; // feet to meters
+    }
+    
+    this.projectInfo.area = Math.round(area * 100) / 100;
+    this.projectInfo.perimeter = Math.round(perimeter * 100) / 100;
   }
-  
-  this.projectInfo.area = Math.round(area * 100) / 100;
-  this.projectInfo.perimeter = Math.round(perimeter * 100) / 100;
   
   // Calculate individual court dimensions if courtRequirements exist
   if (this.requirements.courtRequirements) {
@@ -158,8 +166,8 @@ quotationSchema.pre('save', function(next) {
         court.perimeter = Math.round(courtPerimeter * 100) / 100;
       } else {
         // Use project-level dimensions as fallback
-        court.area = this.projectInfo.area;
-        court.perimeter = this.projectInfo.perimeter;
+        court.area = this.projectInfo.area || 0;
+        court.perimeter = this.projectInfo.perimeter || 0;
       }
     });
   }
@@ -183,4 +191,7 @@ quotationSchema.methods.addCourtRequirement = function(courtKey, courtData) {
   this.requirements.courtRequirements.set(courtKey, courtData);
 };
 
-module.exports = mongoose.model('Quotation', quotationSchema);
+// Fix: Check if model already exists before compiling
+const Quotation = mongoose.models.Quotation || mongoose.model('Quotation', quotationSchema);
+
+module.exports = Quotation;

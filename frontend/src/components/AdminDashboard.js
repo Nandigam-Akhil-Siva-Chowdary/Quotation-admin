@@ -6,6 +6,7 @@ const AdminDashboard = ({ onBack }) => {
   const [stats, setStats] = useState({});
   const [quotations, setQuotations] = useState([]);
   const [selectedQuotation, setSelectedQuotation] = useState(null);
+  const [editingQuotation, setEditingQuotation] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
@@ -49,6 +50,35 @@ const AdminDashboard = ({ onBack }) => {
     setRefreshTrigger(prev => prev + 1);
   };
 
+  const handleEditQuotation = (quotation) => {
+    setEditingQuotation(quotation);
+  };
+
+  const handleSaveEdit = async (updatedQuotation) => {
+    try {
+      const token = localStorage.getItem('adminToken');
+      const config = {
+        headers: { Authorization: `Bearer ${token}` }
+      };
+
+      console.log('💾 Saving quotation:', updatedQuotation);
+
+      const response = await axios.put(
+        `http://localhost:5000/api/admin/quotations/${updatedQuotation._id}/edit`,
+        updatedQuotation,
+        config
+      );
+      
+      alert('✅ Quotation updated successfully!');
+      refreshData();
+      setEditingQuotation(null);
+    } catch (error) {
+      console.error('❌ Error updating quotation:', error);
+      const errorMessage = error.response?.data?.message || 'Error updating quotation. Please check the console for details.';
+      alert(`❌ Error updating quotation: ${errorMessage}`);
+    }
+  };
+
   const handleApproveQuotation = async (quotationId, notes) => {
     try {
       const token = localStorage.getItem('adminToken');
@@ -62,7 +92,6 @@ const AdminDashboard = ({ onBack }) => {
         config
       );
       
-      // Enhanced success message with PDF status
       if (response.data.emailSent && response.data.pdfAttached) {
         alert(`✅ Quotation Approved Successfully!\n\n📧 PDF Quotation sent to: ${response.data.recipient}\n📄 Professional PDF with complete details attached\n\nThe client will receive a downloadable PDF quotation via email.`);
       } else if (response.data.emailSent) {
@@ -71,7 +100,6 @@ const AdminDashboard = ({ onBack }) => {
         alert(`✅ Quotation Approved!\n❌ Email failed. Please contact: ${response.data.recipient}\nError: ${response.data.emailError || 'Unknown error'}`);
       }
       
-      // Refresh data after approval
       refreshData();
       setSelectedQuotation(null);
     } catch (error) {
@@ -162,7 +190,6 @@ const AdminDashboard = ({ onBack }) => {
             </div>
           </div>
 
-          {/* Quick Actions */}
           <div className="quick-actions">
             <h3>🚀 Quick Actions</h3>
             <div className="action-buttons">
@@ -283,6 +310,13 @@ const AdminDashboard = ({ onBack }) => {
                           >
                             👁️ View
                           </button>
+                          <button 
+                            onClick={() => handleEditQuotation(quote)}
+                            className="btn-edit"
+                            title="Edit Quotation"
+                          >
+                            ✏️ Edit
+                          </button>
                           {quote.status === 'pending' && (
                             <>
                               <button 
@@ -322,6 +356,15 @@ const AdminDashboard = ({ onBack }) => {
           onClose={() => setSelectedQuotation(null)}
           onApprove={handleApproveQuotation}
           onReject={handleRejectQuotation}
+          onRefresh={refreshData}
+        />
+      )}
+
+      {editingQuotation && (
+        <EditQuotationModal 
+          quotation={editingQuotation}
+          onClose={() => setEditingQuotation(null)}
+          onSave={handleSaveEdit}
           onRefresh={refreshData}
         />
       )}
@@ -368,7 +411,6 @@ const QuotationModal = ({ quotation, onClose, onApprove, onReject, onRefresh }) 
         </div>
         
         <div className="modal-body">
-          {/* Client Information */}
           <div className="info-section">
             <h3>👤 Client Information</h3>
             <div className="info-grid">
@@ -395,7 +437,6 @@ const QuotationModal = ({ quotation, onClose, onApprove, onReject, onRefresh }) 
             </div>
           </div>
 
-          {/* Project Details */}
           <div className="info-section">
             <h3>🏗️ Project Details</h3>
             <div className="info-grid">
@@ -421,7 +462,6 @@ const QuotationModal = ({ quotation, onClose, onApprove, onReject, onRefresh }) 
             </div>
           </div>
 
-          {/* Requirements */}
           <div className="info-section">
             <h3>⚙️ Requirements</h3>
             <div className="requirements-grid">
@@ -442,7 +482,6 @@ const QuotationModal = ({ quotation, onClose, onApprove, onReject, onRefresh }) 
             </div>
           </div>
 
-          {/* Pricing Breakdown */}
           <div className="info-section">
             <h3>💰 Pricing Breakdown</h3>
             <div className="pricing-table">
@@ -476,7 +515,6 @@ const QuotationModal = ({ quotation, onClose, onApprove, onReject, onRefresh }) 
             </div>
           </div>
 
-          {/* Approval/Rejection Section */}
           {quotation.status === 'pending' && (
             <div className="action-section">
               <h3>🎯 Take Action</h3>
@@ -519,7 +557,6 @@ const QuotationModal = ({ quotation, onClose, onApprove, onReject, onRefresh }) 
             </div>
           )}
 
-          {/* Approved Info */}
           {quotation.status === 'approved' && (
             <div className="approved-info">
               <h3>✅ Approval Details</h3>
@@ -534,7 +571,6 @@ const QuotationModal = ({ quotation, onClose, onApprove, onReject, onRefresh }) 
             </div>
           )}
 
-          {/* Rejected Info */}
           {quotation.status === 'rejected' && (
             <div className="rejected-info">
               <h3>❌ Rejection Details</h3>
@@ -547,6 +583,268 @@ const QuotationModal = ({ quotation, onClose, onApprove, onReject, onRefresh }) 
               </div>
             </div>
           )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const EditQuotationModal = ({ quotation, onClose, onSave, onRefresh }) => {
+  const [editData, setEditData] = useState(JSON.parse(JSON.stringify(quotation)));
+  const [saving, setSaving] = useState(false);
+
+  const handleChange = (section, field, value) => {
+    setEditData(prev => ({
+      ...prev,
+      [section]: {
+        ...prev[section],
+        [field]: value
+      }
+    }));
+  };
+
+  const handlePricingChange = (field, value) => {
+    setEditData(prev => ({
+      ...prev,
+      pricing: {
+        ...prev.pricing,
+        [field]: Number(value) || 0
+      }
+    }));
+  };
+
+  const handleClientInfoChange = (field, value) => {
+    setEditData(prev => ({
+      ...prev,
+      clientInfo: {
+        ...prev.clientInfo,
+        [field]: value
+      }
+    }));
+  };
+
+  const handleEquipmentChange = (index, field, value) => {
+    const updatedEquipment = [...editData.requirements.equipment];
+    
+    if (field === 'quantity' || field === 'unitCost') {
+      const numValue = Number(value) || 0;
+      updatedEquipment[index] = {
+        ...updatedEquipment[index],
+        [field]: numValue,
+        totalCost: field === 'quantity' ? 
+          numValue * (updatedEquipment[index].unitCost || 0) :
+          (updatedEquipment[index].quantity || 1) * numValue
+      };
+    } else {
+      updatedEquipment[index] = {
+        ...updatedEquipment[index],
+        [field]: value
+      };
+    }
+    
+    setEditData(prev => ({
+      ...prev,
+      requirements: {
+        ...prev.requirements,
+        equipment: updatedEquipment
+      }
+    }));
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await onSave(editData);
+    } catch (error) {
+      console.error('Error saving quotation:', error);
+    }
+    setSaving(false);
+  };
+
+  const recalculateTotals = () => {
+    const costFields = ['subbaseCost', 'edgewallCost', 'drainageCost', 'fencingCost', 'flooringCost', 'equipmentCost', 'lightingCost'];
+    const subtotal = costFields.reduce((sum, field) => {
+      return sum + (Number(editData.pricing[field]) || 0);
+    }, 0);
+    
+    const gstAmount = subtotal * 0.18;
+    const grandTotal = subtotal + gstAmount;
+    
+    setEditData(prev => ({
+      ...prev,
+      pricing: {
+        ...prev.pricing,
+        subtotal,
+        gstAmount,
+        grandTotal
+      }
+    }));
+  };
+
+  return (
+    <div className="modal-overlay">
+      <div className="modal-content xlarge-modal">
+        <div className="modal-header">
+          <div className="modal-title">
+            <h2>✏️ Edit Quotation #{quotation.quotationNumber}</h2>
+          </div>
+          <div className="modal-actions">
+            <button onClick={onClose} className="btn-close" title="Close">×</button>
+          </div>
+        </div>
+        
+        <div className="modal-body edit-modal">
+          <div className="edit-section">
+            <h3>👤 Client Information</h3>
+            <div className="edit-grid">
+              <div className="form-group">
+                <label>Name:</label>
+                <input
+                  type="text"
+                  value={editData.clientInfo?.name || ''}
+                  onChange={(e) => handleClientInfoChange('name', e.target.value)}
+                />
+              </div>
+              <div className="form-group">
+                <label>Email:</label>
+                <input
+                  type="email"
+                  value={editData.clientInfo?.email || ''}
+                  onChange={(e) => handleClientInfoChange('email', e.target.value)}
+                />
+              </div>
+              <div className="form-group">
+                <label>Phone:</label>
+                <input
+                  type="text"
+                  value={editData.clientInfo?.phone || ''}
+                  onChange={(e) => handleClientInfoChange('phone', e.target.value)}
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="edit-section">
+            <h3>🏗️ Project Information</h3>
+            <div className="edit-grid">
+              <div className="form-group">
+                <label>Construction Type:</label>
+                <input
+                  type="text"
+                  value={editData.projectInfo?.constructionType || ''}
+                  onChange={(e) => handleChange('projectInfo', 'constructionType', e.target.value)}
+                />
+              </div>
+              <div className="form-group">
+                <label>Area (m²):</label>
+                <input
+                  type="number"
+                  value={editData.projectInfo?.area || 0}
+                  onChange={(e) => handleChange('projectInfo', 'area', Number(e.target.value))}
+                />
+              </div>
+              <div className="form-group">
+                <label>Perimeter (m):</label>
+                <input
+                  type="number"
+                  value={editData.projectInfo?.perimeter || 0}
+                  onChange={(e) => handleChange('projectInfo', 'perimeter', Number(e.target.value))}
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="edit-section">
+            <h3>💰 Pricing Breakdown</h3>
+            <div className="pricing-edit-grid">
+              {editData.pricing && Object.entries(editData.pricing)
+                .filter(([key]) => key !== 'subtotal' && key !== 'gstAmount' && key !== 'grandTotal')
+                .map(([key, value]) => (
+                  <div key={key} className="form-group">
+                    <label>
+                      {key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}:
+                    </label>
+                    <input
+                      type="number"
+                      value={value || 0}
+                      onChange={(e) => handlePricingChange(key, Number(e.target.value))}
+                      onBlur={recalculateTotals}
+                    />
+                  </div>
+                ))
+              }
+            </div>
+            
+            <div className="calculated-totals">
+              <div className="total-row">
+                <strong>Subtotal:</strong>
+                <span>₹{editData.pricing?.subtotal?.toLocaleString() || 0}</span>
+              </div>
+              <div className="total-row">
+                <strong>GST @18%:</strong>
+                <span>₹{editData.pricing?.gstAmount?.toLocaleString() || 0}</span>
+              </div>
+              <div className="total-row grand-total">
+                <strong>Grand Total:</strong>
+                <span>₹{editData.pricing?.grandTotal?.toLocaleString() || 0}</span>
+              </div>
+            </div>
+          </div>
+
+          {editData.requirements?.equipment?.length > 0 && (
+            <div className="edit-section">
+              <h3>⚙️ Equipment</h3>
+              <div className="equipment-edit-list">
+                {editData.requirements.equipment.map((item, index) => (
+                  <div key={index} className="equipment-edit-item">
+                    <div className="equipment-name">{item.name}</div>
+                    <div className="equipment-fields">
+                      <div className="form-group">
+                        <label>Quantity:</label>
+                        <input
+                          type="number"
+                          value={item.quantity || 1}
+                          onChange={(e) => handleEquipmentChange(index, 'quantity', e.target.value)}
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Unit Cost:</label>
+                        <input
+                          type="number"
+                          value={item.unitCost || 0}
+                          onChange={(e) => handleEquipmentChange(index, 'unitCost', e.target.value)}
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Total Cost:</label>
+                        <input
+                          type="number"
+                          value={item.totalCost || 0}
+                          onChange={(e) => handleEquipmentChange(index, 'totalCost', e.target.value)}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="edit-actions">
+            <button 
+              onClick={recalculateTotals}
+              className="btn-secondary"
+            >
+              🔄 Recalculate Totals
+            </button>
+            <button 
+              onClick={handleSave}
+              className="btn-primary"
+              disabled={saving}
+            >
+              {saving ? 'Saving...' : '💾 Save Changes'}
+            </button>
+          </div>
         </div>
       </div>
     </div>

@@ -26,7 +26,7 @@ const AdminLogin = ({ onSuccess, onBack }) => {
       const response = await axios.post('http://localhost:5000/api/auth/login', formData);
       localStorage.setItem('adminToken', response.data.token);
       localStorage.setItem('adminUser', JSON.stringify(response.data.data.user));
-      onSuccess(); // This should trigger the success callback
+      onSuccess();
     } catch (error) {
       setError(error.response?.data?.message || 'Login failed. Please check your credentials.');
     }

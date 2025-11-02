@@ -30,10 +30,11 @@ const ConstructionType = ({ data, updateData, nextStep, prevStep }) => {
   };
 
   const handleDimensionChange = (field, value) => {
-    setFormData({
+    const updatedData = {
       ...formData,
       [field]: value
-    });
+    };
+    setFormData(updatedData);
   };
 
   const handleSubmit = (e) => {
@@ -49,15 +50,50 @@ const ConstructionType = ({ data, updateData, nextStep, prevStep }) => {
       return;
     }
     
-    updateData(formData);
+    // Calculate area for both standard and custom types
+    let area = 0;
+    let perimeter = 0;
+    
+    if (formData.constructionType === 'standard') {
+      // Use default area for standard courts
+      area = 400; // Default area for standard courts
+      perimeter = 80; // Default perimeter
+    } else {
+      // Calculate area for custom courts
+      area = formData.length * formData.width;
+      perimeter = 2 * (parseFloat(formData.length) + parseFloat(formData.width));
+      
+      // Convert to meters if input was in feet
+      if (formData.unit === 'feet') {
+        area = area * 0.092903; // sq feet to sq meters
+        perimeter = perimeter * 0.3048; // feet to meters
+      }
+      
+      area = Math.round(area * 100) / 100;
+      perimeter = Math.round(perimeter * 100) / 100;
+    }
+    
+    const finalData = {
+      ...formData,
+      area: area,
+      perimeter: perimeter
+    };
+    
+    updateData(finalData);
     nextStep();
   };
 
   const calculateArea = () => {
     if (formData.length && formData.width) {
-      const area = formData.length * formData.width;
-      const unit = formData.unit === 'meters' ? 'sq. meters' : 'sq. feet';
-      return `${area.toLocaleString()} ${unit}`;
+      let area = formData.length * formData.width;
+      let unit = formData.unit === 'meters' ? 'sq. meters' : 'sq. feet';
+      
+      if (formData.unit === 'feet') {
+        area = area * 0.092903;
+        unit = 'sq. meters';
+      }
+      
+      return `${Math.round(area * 100) / 100} ${unit}`;
     }
     return '';
   };
@@ -79,7 +115,11 @@ const ConstructionType = ({ data, updateData, nextStep, prevStep }) => {
                 <li>Pre-defined sizes</li>
                 <li>Tournament ready</li>
                 <li>Professional specifications</li>
+                <li>Automatic area calculation</li>
               </ul>
+              <div className="area-calculation">
+                <strong>Estimated Area: ~400 sq. meters</strong>
+              </div>
             </div>
 
             <div
@@ -92,6 +132,7 @@ const ConstructionType = ({ data, updateData, nextStep, prevStep }) => {
                 <li>Flexible dimensions</li>
                 <li>Space optimization</li>
                 <li>Custom design</li>
+                <li>Enter exact measurements</li>
               </ul>
             </div>
           </div>
@@ -152,8 +193,19 @@ const ConstructionType = ({ data, updateData, nextStep, prevStep }) => {
             {calculateArea() && (
               <div className="area-calculation">
                 <h4>Calculated Area: {calculateArea()}</h4>
+                <p><small>This area will be used for pricing calculations</small></p>
               </div>
             )}
+          </div>
+        )}
+
+        {formData.constructionType === 'standard' && (
+          <div className="section">
+            <div className="area-calculation">
+              <h4>Standard Court Information</h4>
+              <p><strong>Estimated Area:</strong> ~400 sq. meters</p>
+              <p><strong>Note:</strong> Standard courts use predefined dimensions for accurate pricing calculation.</p>
+            </div>
           </div>
         )}
 
