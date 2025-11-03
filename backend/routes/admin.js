@@ -239,7 +239,7 @@ const generateQuotationPDF = (quotation) => {
   return new Promise((resolve, reject) => {
     try {
       const doc = new PDFDocument({ 
-        margin: 15,
+        margin: 25,
         size: 'A4'
       });
       const buffers = [];
@@ -250,16 +250,19 @@ const generateQuotationPDF = (quotation) => {
         resolve(pdfData);
       });
 
-      const pageWidth = 595.28;
-      const pageHeight = 841.89;
-      const margin = 15;
+      const pageWidth = doc.page.width;
+      const pageHeight = doc.page.height;
+      const margin = 25;
       
       let yPosition = margin;
+      let currentPage = 1;
+      const totalPages = 1;
 
-      const checkNewPage = (spaceNeeded = 10) => {
-        if (yPosition + spaceNeeded > pageHeight - 50) {
+      const checkNewPage = (spaceNeeded = 30) => {
+        if (yPosition + spaceNeeded > pageHeight - 80) {
           doc.addPage();
           yPosition = margin;
+          currentPage++;
           addHeader();
           return true;
         }
@@ -267,276 +270,408 @@ const generateQuotationPDF = (quotation) => {
       };
 
       const addHeader = () => {
-        doc.rect(0, 0, pageWidth, 35).fill('#f44237');
-        doc.fillColor('white')
-           .fontSize(16)
+        // Header with increased height
+        doc.rect(0, 0, pageWidth, 75)
+           .fill('#f44237');
+        
+        // Add logo
+        try {
+          doc.image('../frontend/public/nexoralogo.jpg', margin, 17, { 
+            width: 45,
+            height: 45 
+          });
+        } catch (error) {
+          // Fallback if logo not found
+          doc.rect(margin, 17, 45, 45)
+             .fill('#ffffff');
+          doc.fontSize(9)
+             .fillColor('#f44237')
+             .text('LOGO', margin + 15, 35);
+        }
+
+        // Company info
+        doc.fontSize(18)
+           .fillColor('white')
            .font('Helvetica-Bold')
-           .text('NEXORA GROUP', margin + 33, 12);
-        doc.fontSize(8)
+           .text('NEXORA GROUP', margin + 60, 22);
+        
+        doc.fontSize(10)
            .font('Helvetica')
-           .text('Sports Infrastructure Solutions', margin + 33, 22);
-        doc.fontSize(7)
-           .text('+91-8431322728', pageWidth - margin, 10, { align: 'right' })
-           .text('info.nexoragroup@gmail.com', pageWidth - margin, 17, { align: 'right' })
-           .text('www.nexoragroup.com', pageWidth - margin, 24, { align: 'right' });
-        doc.fillColor('black');
-        yPosition = 45;
+           .text('Sports Infrastructure Solutions', margin + 60, 42);
+
+        // Contact info
+        const contactX = pageWidth - 130;
+        doc.fontSize(8)
+           .fillColor('white')
+           .text('+91 8431322728', contactX, 22, { width: 110 })
+           .text('info.nexoragroup@gmail.com', contactX, 34, { width: 110 })
+           .text('www.nexoragroup.com', contactX, 46, { width: 110 });
+
+        yPosition = 85;
       };
 
+      const addFooter = () => {
+        // Footer with increased height
+        const footerY = pageHeight - 40;
+        doc.rect(0, footerY, pageWidth, 40)
+           .fill('#f44237');
+        
+        doc.fontSize(8)
+           .fillColor('white')
+           .text('NEXORA GROUP - Sports Infrastructure Solutions | Jalahalli West, Bangalore-560015', 
+                 pageWidth/2, footerY + 10, { align: 'center' })
+           .text('+91 8431322728 | info.nexoragroup@gmail.com | www.nexoragroup.com', 
+                 pageWidth/2, footerY + 20, { align: 'center' });
+
+        // Page number centered
+        doc.fontSize(9)
+           .fillColor('white')
+           .text(`Page ${currentPage} of ${totalPages}`, pageWidth/2, footerY + 32, { align: 'center' });
+      };
+
+      // Add header to first page
       addHeader();
 
-      doc.fontSize(12)
-         .font('Helvetica-Bold')
-         .text('QUOTATION FOR SPORTS COURT CONSTRUCTION', pageWidth/2, yPosition, { align: 'center' });
+      // Main title - centered with increased font size
+      // doc.fontSize(16)
+      //    .fillColor('black')
+      //    .font('Helvetica-Bold')
+      //    .text('QUOTATION', pageWidth/2, yPosition, { 
+      //      align: 'center'
+      //    });
       
-      yPosition += 8;
-      doc.fontSize(9)
+      yPosition += 30;
+
+      // Reference and date
+      doc.fontSize(11)
+         .fillColor('black')
          .font('Helvetica')
          .text(`Ref. No: ${quotation.quotationNumber}`, margin, yPosition)
-         .text(`Date: ${new Date(quotation.approvedAt || quotation.createdAt).toLocaleDateString('en-IN')}`, pageWidth - margin, yPosition, { align: 'right' });
+         .text(`Date: ${new Date(quotation.approvedAt || quotation.createdAt).toLocaleDateString('en-IN')}`, pageWidth - 130, yPosition, { width: 110 });
       
-      yPosition += 4;
-      doc.text(`Status: APPROVED`, margin, yPosition);
+      yPosition += 30;
 
-      // Client Information Section
-      checkNewPage(20);
-      yPosition += 12;
-      doc.fontSize(10)
+      // Client Details Section
+      doc.fontSize(12)
          .font('Helvetica-Bold')
+         .fillColor('#2c3e50')
          .text('CLIENT DETAILS:', margin, yPosition);
       
-      yPosition += 6;
-      const clientInfo = quotation.clientInfo || {};
-      doc.fontSize(9)
-         .font('Helvetica')
-         .text(`Name: ${clientInfo.name || 'N/A'}`, margin, yPosition);
-      
-      yPosition += 4;
-      doc.text(`Email: ${clientInfo.email || 'N/A'}`, margin, yPosition);
-      
-      yPosition += 4;
-      doc.text(`Phone: ${clientInfo.phone || 'N/A'}`, margin, yPosition);
-      
-      yPosition += 4;
-      
-      const addressText = `Address: ${clientInfo.address || 'N/A'}`;
-      const addressHeight = doc.heightOfString(addressText, {
-        width: 180,
-        align: 'left'
-      });
-      
-      doc.text(addressText, margin, yPosition, {
-        width: 180,
-        align: 'left'
-      });
-      
-      yPosition += addressHeight + 8;
+      yPosition += 20;
 
-      // Project Details
-      checkNewPage(15);
+      const clientInfo = quotation.clientInfo || {};
+      const clientDetails = [
+        `Name: ${clientInfo.name || 'N/A'}`,
+        `Email: ${clientInfo.email || 'N/A'}`,
+        `Phone: ${clientInfo.phone || 'N/A'}`,
+        `Address: ${clientInfo.address || 'N/A'}`
+      ];
+
       doc.fontSize(10)
-         .font('Helvetica-Bold')
-         .text('PROPOSAL DETAILS:', margin, yPosition);
+         .font('Helvetica')
+         .fillColor('black');
       
-      yPosition += 6;
+      clientDetails.forEach(detail => {
+        doc.text(detail, margin, yPosition, { width: pageWidth - (2 * margin) });
+        yPosition += 15;
+      });
+
+      yPosition += 25;
+
+      // Proposal Details Section
+      doc.fontSize(12)
+         .font('Helvetica-Bold')
+         .fillColor('#2c3e50')
+         .text('PROPOSAL DETAILS', margin, yPosition);
+      
+      yPosition += 20;
+
       const projectInfo = quotation.projectInfo || {};
       const sports = projectInfo.sports || [];
       const sportNames = sports.map(s => s?.sport?.replace(/-/g, ' ').toUpperCase()).join(', ') || 
                         (projectInfo.sport ? projectInfo.sport.replace(/-/g, ' ').toUpperCase() : 'SPORTS COURT');
       
-      doc.fontSize(9)
+      doc.fontSize(10)
          .font('Helvetica')
-         .text(`Proposal for ${sportNames} ${projectInfo.constructionType?.toUpperCase() || 'STANDARD'}`, margin, yPosition);
+         .text(`Proposal for ${sportNames} ${projectInfo.constructionType?.toUpperCase() || 'STANDARD'}`, margin, yPosition, { width: pageWidth - (2 * margin) });
       
-      yPosition += 4;
+      yPosition += 15;
       doc.text(`Area: ${projectInfo.area || 0} sq. meters`, margin, yPosition);
       
-      yPosition += 4;
-      doc.text(`Perimeter: ${projectInfo.perimeter || 0} meters`, margin, yPosition);
-      
-      yPosition += 10;
+      yPosition += 30;
 
-      // Requirements Section
-      checkNewPage(30);
-      doc.fontSize(10)
-         .font('Helvetica-Bold')
-         .text('CONSTRUCTION REQUIREMENTS:', margin, yPosition);
-      
-      yPosition += 8;
-      
-      const requirements = quotation.requirements || {};
-      const courtRequirements = requirements.courtRequirements || {};
-      const hasMultipleCourts = Object.keys(courtRequirements).length > 0;
+      // Price Table with closer columns
+      const descWidth = 280;
+      const qtyX = margin + descWidth;
+      const priceX = qtyX + 40;  // Reduced gap
+      const amountX = priceX + 50; // Reduced gap
 
-      if (hasMultipleCourts) {
-        Object.values(courtRequirements).forEach((court, index) => {
-          if (!court) return;
-          
-          checkNewPage(40);
-          doc.fontSize(9)
-             .font('Helvetica-Bold')
-             .text(`${court.sport?.toUpperCase() || 'COURT'} - Court ${court.courtNumber || index + 1}`, margin, yPosition);
-          
-          yPosition += 6;
-          doc.fontSize(8)
-             .font('Helvetica')
-             .text(`Subbase: ${court.subbase?.type || 'Not specified'}${court.subbase?.edgewall ? ' + Edgewall' : ''}${court.subbase?.drainage?.required ? ' + Drainage' : ''}`, margin, yPosition);
-          
-          yPosition += 4;
-          doc.text(`Flooring: ${court.flooring?.type || 'Not specified'}`, margin, yPosition);
-          
-          yPosition += 4;
-          doc.text(`Fencing: ${court.fencing?.required ? court.fencing.type || 'Yes' : 'No'}`, margin, yPosition);
-          
-          yPosition += 4;
-          doc.text(`Lighting: ${court.lighting?.required ? court.lighting.type || 'Yes' : 'No'}`, margin, yPosition);
-          
-          yPosition += 8;
-        });
-      } else {
-        doc.fontSize(8)
-           .font('Helvetica')
-           .text(`Subbase: ${requirements.subbase?.type || 'Not specified'}${requirements.subbase?.edgewall ? ' + Edgewall' : ''}${requirements.subbase?.drainage?.required ? ' + Drainage' : ''}`, margin, yPosition);
-        
-        yPosition += 4;
-        doc.text(`Flooring: ${requirements.flooring?.type || 'Not specified'}`, margin, yPosition);
-        
-        yPosition += 4;
-        doc.text(`Fencing: ${requirements.fencing?.required ? requirements.fencing.type || 'Yes' : 'No'}`, margin, yPosition);
-        
-        yPosition += 4;
-        doc.text(`Lighting: ${requirements.lighting?.required ? requirements.lighting.type || 'Yes' : 'No'}`, margin, yPosition);
-        
-        yPosition += 8;
-      }
-
-      // Price Breakdown Table
-      checkNewPage(50);
-      doc.fontSize(10)
-         .font('Helvetica-Bold')
-         .text('PRICE BREAKDOWN', margin, yPosition);
+      // Table header with background color
+      doc.rect(margin, yPosition, pageWidth - (2 * margin), 20)
+         .fill('#f8f9fa');
       
-      yPosition += 8;
-      
-      doc.fontSize(9)
-         .font('Helvetica-Bold')
-         .text('Description', margin, yPosition)
-         .text('Amount (₹)', pageWidth - margin, yPosition, { align: 'right' });
-      
-      yPosition += 5;
-      doc.moveTo(margin, yPosition).lineTo(pageWidth - margin, yPosition).strokeColor('#333').stroke();
-      
-      yPosition += 8;
-      const pricing = quotation.pricing || {};
-
-      const addPriceRow = (description, amount) => {
-        checkNewPage(10);
-        if (amount > 0) {
-          doc.fontSize(9)
-             .font('Helvetica')
-             .text(description, margin, yPosition)
-             .text(amount.toLocaleString('en-IN'), pageWidth - margin, yPosition, { align: 'right' });
-          yPosition += 12;
-        }
-      };
-
-      addPriceRow('Subbase Construction', pricing.subbaseCost || 0);
-      addPriceRow('Flooring System', pricing.flooringCost || 0);
-      addPriceRow('Sports Equipment', pricing.equipmentCost || 0);
-      addPriceRow('Fencing System', pricing.fencingCost || 0);
-      addPriceRow('Lighting System', pricing.lightingCost || 0);
-      addPriceRow('Drainage System', pricing.drainageCost || 0);
-      addPriceRow('Edgewall Construction', pricing.edgewallCost || 0);
-
-      // Total Section
-      checkNewPage(30);
-      yPosition += 5;
-      doc.moveTo(margin, yPosition).lineTo(pageWidth - margin, yPosition).strokeColor('#333').stroke();
-      
-      yPosition += 10;
-      doc.fontSize(9)
-         .font('Helvetica-Bold')
-         .text('Subtotal:', pageWidth - 120, yPosition)
-         .text((pricing.subtotal || 0).toLocaleString('en-IN'), pageWidth - margin, yPosition, { align: 'right' });
-      
-      yPosition += 10;
-      doc.text('GST @18%:', pageWidth - 120, yPosition)
-         .text((pricing.gstAmount || 0).toLocaleString('en-IN'), pageWidth - margin, yPosition, { align: 'right' });
-      
-      yPosition += 12;
-      doc.moveTo(pageWidth - 150, yPosition - 2).lineTo(pageWidth - margin, yPosition - 2).strokeColor('#f44237').lineWidth(2).stroke();
-      
-      yPosition += 5;
       doc.fontSize(11)
-         .text('GRAND TOTAL:', pageWidth - 120, yPosition)
-         .text((pricing.grandTotal || 0).toLocaleString('en-IN'), pageWidth - margin, yPosition, { align: 'right' });
+         .font('Helvetica-Bold')
+         .fillColor('#2c3e50')
+         .text('Description', margin + 5, yPosition + 5)
+         .text('Qty', qtyX, yPosition + 5)
+         .text('Price', priceX, yPosition + 5)
+         .text('Amount', amountX, yPosition + 5, { align: 'right' });
+      
+      yPosition += 25;
 
-      // Admin Notes
-      if (quotation.adminNotes) {
-        checkNewPage(40);
-        yPosition += 20;
+      // Dynamic pricing based on requirements
+      const pricing = quotation.pricing || {};
+      const requirements = quotation.requirements || {};
+      const projectArea = projectInfo.area || 0;
+
+      // Base Construction
+      if (pricing.subbaseCost > 0) {
+        checkNewPage(80);
+        const subbaseType = requirements.subbase?.type || 'compacted-soil';
+        const basePricePerSqM = 800;
+        
+        // Item row
         doc.fontSize(10)
            .font('Helvetica-Bold')
-           .text('SPECIAL NOTES:', margin, yPosition);
+           .fillColor('black')
+           .text(`BASE CONSTRUCTION - ${subbaseType}`, margin, yPosition);
         
-        yPosition += 8;
+        doc.fontSize(10)
+           .font('Helvetica')
+           .text(`${projectArea}`, qtyX, yPosition)
+           .text(`${basePricePerSqM.toLocaleString('en-IN')}/-`, priceX, yPosition)
+           .text((pricing.subbaseCost || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 }), amountX, yPosition, { align: 'right' });
         
-        const notesHeight = doc.heightOfString(quotation.adminNotes, {
-          width: pageWidth - (2 * margin)
+        yPosition += 25;
+
+        // Base Construction Description
+        const baseDescription = [
+          'Excavation work in surface excavation not exceeding 30cm depth.',
+          'Disposal of excavated earth up to 50m as directed.',
+          'Sub Grade preparation with power road to the 512 tonne.',
+          'WBN - Stone aggregate with 100mm thickness.',
+          'PCC flooring M-10 to M15 with 75mm thickness.'
+        ];
+
+        doc.fontSize(9)
+           .fillColor('#666');
+        
+        baseDescription.forEach(line => {
+          doc.text(line, margin + 10, yPosition, { width: pageWidth - (2 * margin) });
+          yPosition += 12;
         });
         
-        doc.fontSize(9)
-           .font('Helvetica')
-           .text(quotation.adminNotes, margin, yPosition, {
-             width: pageWidth - (2 * margin),
-             align: 'left'
-           });
-        
-        yPosition += notesHeight + 8;
+        yPosition += 15;
+        // Section divider line
+        doc.moveTo(margin, yPosition)
+           .lineTo(pageWidth - margin, yPosition)
+           .strokeColor('#e0e0e0')
+           .lineWidth(0.5)
+           .stroke();
+        yPosition += 20;
       }
 
-      // Terms and Conditions
-      checkNewPage(60);
-      yPosition += 20;
-      doc.fontSize(9)
-         .font('Helvetica-Bold')
-         .text('TERMS & CONDITIONS:', margin, yPosition);
-      
-      yPosition += 8;
-      const terms = [
-        '• This quotation is valid for 30 days from the date of issue',
-        '• Prices are subject to change without prior notice',
-        '• 50% advance payment required to commence work',
-        '• Balance payment upon completion of project',
-        '• Installation timeline: 4-6 weeks from advance payment',
-        '• Warranty: 1 year on materials and workmanship'
-      ];
-      
-      terms.forEach(term => {
-        checkNewPage(10);
-        doc.fontSize(8)
+      // Flooring System
+      if (pricing.flooringCost > 0) {
+        checkNewPage(70);
+        const flooringType = requirements.flooring?.type || 'acrylic-surface';
+        const flooringPricePerSqM = Math.round((pricing.flooringCost / projectArea) || 1000);
+        
+        // Item row
+        doc.fontSize(10)
+           .font('Helvetica-Bold')
+           .fillColor('black')
+           .text(`FLOORING - ${flooringType}`, margin, yPosition);
+        
+        doc.fontSize(10)
            .font('Helvetica')
-           .text(term, margin + 5, yPosition);
-        yPosition += 10;
+           .text(`${projectArea}`, qtyX, yPosition)
+           .text(`${flooringPricePerSqM.toLocaleString('en-IN')}/-`, priceX, yPosition)
+           .text((pricing.flooringCost || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 }), amountX, yPosition, { align: 'right' });
+        
+        yPosition += 25;
+
+        const flooringDescription = [
+          '8-Layer ITF approved acrylic system.',
+          'Layers: Primer, Resurfacer, Uninubber.',
+          'Precoat, Topcoat for protection.',
+          'High performance gameplay surface.',
+          'Make: UNICAPRIOR/TOP FLOOR.'
+        ];
+
+        doc.fontSize(9)
+           .fillColor('#666');
+        
+        flooringDescription.forEach(line => {
+          doc.text(line, margin + 10, yPosition, { width: pageWidth - (2 * margin) });
+          yPosition += 12;
+        });
+        
+        yPosition += 15;
+        // Section divider line
+        doc.moveTo(margin, yPosition)
+           .lineTo(pageWidth - margin, yPosition)
+           .strokeColor('#e0e0e0')
+           .lineWidth(0.5)
+           .stroke();
+        yPosition += 20;
+      }
+
+      // Sports Equipment
+      if (pricing.equipmentCost > 0) {
+        checkNewPage(60);
+        const equipmentQty = 1; // Assuming 1 set of equipment
+        
+        // Item row
+        doc.fontSize(10)
+           .font('Helvetica-Bold')
+           .text('SPORTS EQUIPMENT', margin, yPosition);
+        
+        doc.fontSize(10)
+           .font('Helvetica')
+           .text(`${equipmentQty}`, qtyX, yPosition)
+           .text(`${pricing.equipmentCost.toLocaleString('en-IN')}/-`, priceX, yPosition)
+           .text((pricing.equipmentCost || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 }), amountX, yPosition, { align: 'right' });
+        
+        yPosition += 25;
+
+        const equipmentDescription = [
+          'High quality sports equipment.',
+          'Competition standard equipment.',
+          'Durable and weather resistant.'
+        ];
+
+        doc.fontSize(9)
+           .fillColor('#666');
+        
+        equipmentDescription.forEach(line => {
+          doc.text(line, margin + 10, yPosition, { width: pageWidth - (2 * margin) });
+          yPosition += 12;
+        });
+        
+        yPosition += 15;
+        // Section divider line
+        doc.moveTo(margin, yPosition)
+           .lineTo(pageWidth - margin, yPosition)
+           .strokeColor('#e0e0e0')
+           .lineWidth(0.5)
+           .stroke();
+        yPosition += 20;
+      }
+
+      // Additional items with qty and price
+      const additionalItems = [
+        { key: 'fencingCost', label: 'FENCING SYSTEM', desc: 'Professional court fencing for safety and boundary definition.', qty: 1 },
+        { key: 'lightingCost', label: 'LIGHTING SYSTEM', desc: 'Professional court lighting for evening gameplay.', qty: 1 },
+        { key: 'drainageCost', label: 'DRAINAGE SYSTEM', desc: 'Proper drainage system for water management.', qty: 1 },
+        { key: 'edgewallCost', label: 'EDGEWALL CONSTRUCTION', desc: 'Boundary edgewall construction for court definition.', qty: 1 }
+      ];
+
+      additionalItems.forEach(item => {
+        if (pricing[item.key] > 0) {
+          checkNewPage(50);
+          
+          // Item row
+          doc.fontSize(10)
+             .font('Helvetica-Bold')
+             .text(item.label, margin, yPosition);
+          
+          doc.fontSize(10)
+             .font('Helvetica')
+             .text(`${item.qty}`, qtyX, yPosition)
+             .text(`${pricing[item.key].toLocaleString('en-IN')}/-`, priceX, yPosition)
+             .text((pricing[item.key] || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 }), amountX, yPosition, { align: 'right' });
+          
+          yPosition += 25;
+
+          doc.fontSize(9)
+             .fillColor('#666')
+             .text(item.desc, margin + 10, yPosition, { width: pageWidth - (2 * margin) });
+          
+          yPosition += 20;
+          // Section divider line
+          doc.moveTo(margin, yPosition)
+             .lineTo(pageWidth - margin, yPosition)
+             .strokeColor('#e0e0e0')
+             .lineWidth(0.5)
+             .stroke();
+          yPosition += 20;
+        }
       });
 
-      const addFooter = () => {
-        const footerY = pageHeight - 20;
-        doc.rect(0, footerY, pageWidth, 20).fill('#f44237');
-        doc.fillColor('white')
-           .fontSize(7)
-           .font('Helvetica')
-           .text('NEXORA GROUP - Sports Infrastructure Solutions | Jalahalli West, Bangalore-560015', 
-                 pageWidth/2, footerY + 6, { align: 'center' })
-           .text('+91 8431322728 | info.nexoragroup@gmail.com | www.nexoragroup.com', 
-                 pageWidth/2, footerY + 13, { align: 'center' });
-      };
+      checkNewPage(60);
+      yPosition += 15;
 
+      // Total Section
+      const totalX = amountX;
+      const subtotal = pricing.subtotal || 0;
+      const gstAmount = pricing.gstAmount || 0;
+      const grandTotal = pricing.grandTotal || 0;
+
+      // Total line
+      doc.moveTo(margin, yPosition)
+         .lineTo(pageWidth - margin, yPosition)
+         .strokeColor('#2c3e50')
+         .lineWidth(1)
+         .stroke();
+      yPosition += 15;
+
+      doc.fontSize(11)
+         .font('Helvetica-Bold')
+         .fillColor('black')
+         .text('Total', priceX - 20, yPosition)
+         .text(subtotal.toLocaleString('en-IN', { minimumFractionDigits: 2 }), totalX, yPosition, { align: 'right' });
+      
+      yPosition += 18;
+      doc.text('GST@18%', priceX - 20, yPosition)
+         .text(gstAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 }), totalX, yPosition, { align: 'right' });
+      
+      yPosition += 25;
+      doc.fontSize(13)
+         .fillColor('#d35400')
+         .text('Grand Total', priceX - 20, yPosition)
+         .text(grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 }), totalX, yPosition, { align: 'right' });
+
+      yPosition += 40;
+
+      // Terms and Conditions Section
+      checkNewPage(120);
+      doc.fontSize(12)
+         .font('Helvetica-Bold')
+         .fillColor('#2c3e50')
+         .text('TERMS AND CONDITIONS', margin, yPosition);
+      
+      yPosition += 20;
+
+      const termsAndConditions = [
+        '• 50% advance payment is required prior to the commencement of construction work',
+        '• We provide a comprehensive 3-year warranty on materials and workmanship',
+        '• Professional court dimension marking and lining will be executed by our expert team',
+        '• All construction materials used are of premium quality and industry-approved standards',
+        '• The quotation validity period is 30 days from the date of issue',
+        '• Balance payment is due upon satisfactory completion of the project',
+        '• Installation timeline is typically 4-6 weeks from receipt of advance payment',
+        '• Any modifications to the original scope may affect the final pricing and timeline',
+        '• Site preparation and basic groundwork are the responsibility of the client',
+        '• We maintain the right to make minor modifications for technical optimization'
+      ];
+
+      doc.fontSize(9)
+         .fillColor('#666')
+         .font('Helvetica');
+      
+      termsAndConditions.forEach(term => {
+        checkNewPage(15);
+        doc.text(term, margin, yPosition, { 
+          width: pageWidth - (2 * margin),
+          align: 'left' 
+        });
+        yPosition += 15;
+      });
+
+      // Add footer to all pages
       addFooter();
-
-      doc.fillColor(100, 100, 100)
-         .fontSize(8)
-         .text('Page 1 of 1', pageWidth/2, pageHeight - 30, { align: 'center' });
 
       doc.end();
 
@@ -545,7 +680,7 @@ const generateQuotationPDF = (quotation) => {
       reject(error);
     }
   });
-}
+};
 
 // Email sending function with PDF attachment
 const sendQuotationEmailWithPDF = async (quotation) => {
