@@ -50,6 +50,21 @@ const AdminDashboard = ({ onBack }) => {
     setRefreshTrigger(prev => prev + 1);
   };
 
+  const handleViewQuotation = async (quotationId) => {
+    try {
+      const token = localStorage.getItem('adminToken');
+      const config = {
+        headers: { Authorization: `Bearer ${token}` }
+      };
+
+      const response = await axios.get(`http://localhost:5000/api/admin/quotations/${quotationId}`, config);
+      setSelectedQuotation(response.data);
+    } catch (error) {
+      console.error('Error fetching quotation details:', error);
+      alert('Error loading quotation details');
+    }
+  };
+
   const handleEditQuotation = (quotation) => {
     // Ensure all nested objects exist before editing
     const safeQuotation = {
@@ -172,7 +187,7 @@ const AdminDashboard = ({ onBack }) => {
             🔄 Refresh
           </button>
         </div>
-        <button onClick={onBack} className="btn-secondary">← Back to Main</button>
+        <button onClick={onBack} className="btn-secondary" id="back-main-btn">← Back to Main</button>
       </div>
 
       <div className="admin-nav">
@@ -335,7 +350,7 @@ const AdminDashboard = ({ onBack }) => {
                       <td>
                         <div className="action-buttons">
                           <button 
-                            onClick={() => setSelectedQuotation(quote)}
+                            onClick={() => handleViewQuotation(quote._id)}
                             className="btn-view"
                             title="View Details"
                           >
@@ -351,7 +366,7 @@ const AdminDashboard = ({ onBack }) => {
                           {quote.status === 'pending' && (
                             <>
                               <button 
-                                onClick={() => setSelectedQuotation(quote)}
+                                onClick={() => handleViewQuotation(quote._id)}
                                 className="btn-approve"
                                 title="Approve & Send PDF"
                               >
@@ -425,6 +440,15 @@ const QuotationModal = ({ quotation, onClose, onApprove, onReject, onRefresh }) 
     }
   };
 
+  // Helper function to format option names
+  const formatOptionName = (name) => {
+    return name.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+  };
+
+  // Check if multiple courts exist
+  const hasMultipleCourts = quotation.requirements?.courtRequirements && 
+    Object.keys(quotation.requirements.courtRequirements).length > 0;
+
   return (
     <div className="modal-overlay">
       <div className="modal-content large-modal">
@@ -472,10 +496,9 @@ const QuotationModal = ({ quotation, onClose, onApprove, onReject, onRefresh }) 
             <h3>🏗️ Project Details</h3>
             <div className="info-grid">
               <div className="info-item">
-                <label>Sport:</label>
+                <label>Sports:</label>
                 <span>
-                  {quotation.projectInfo?.sports?.map(s => s.sport).join(', ') || 
-                   quotation.projectInfo?.sport || 'N/A'}
+                  {quotation.projectInfo?.sports?.map(s => formatOptionName(s.sport)).join(', ') || 'N/A'}
                 </span>
               </div>
               <div className="info-item">
@@ -494,23 +517,77 @@ const QuotationModal = ({ quotation, onClose, onApprove, onReject, onRefresh }) 
           </div>
 
           <div className="info-section">
-            <h3>⚙️ Requirements</h3>
-            <div className="requirements-grid">
-              <div className="requirement-item">
-                <strong>Subbase:</strong> {quotation.requirements?.subbase?.type || 'Not specified'}
+            <h3>⚙️ Client Requirements</h3>
+            
+            {hasMultipleCourts ? (
+              // Multiple courts display
+              <div className="court-requirements-list">
+                <h4>Multiple Courts Configuration</h4>
+                {Object.entries(quotation.requirements.courtRequirements).map(([courtKey, court]) => (
+                  <div key={courtKey} className="court-requirement-item">
+                    <h5>{formatOptionName(court.sport)} - Court {court.courtNumber}</h5>
+                    <div className="requirements-grid">
+                      <div className="requirement-item">
+                        <strong>Subbase:</strong> {formatOptionName(court.subbase?.type || 'Not specified')}
+                        {court.subbase?.edgewall && ' + Edgewall'}
+                        {court.subbase?.drainage?.required && ' + Drainage'}
+                      </div>
+                      <div className="requirement-item">
+                        <strong>Flooring:</strong> {formatOptionName(court.flooring?.type || 'Not specified')}
+                      </div>
+                      <div className="requirement-item">
+                        <strong>Fencing:</strong> {court.fencing?.required ? 
+                          `${formatOptionName(court.fencing?.type || 'Not specified')}` : 'No'}
+                      </div>
+                      <div className="requirement-item">
+                        <strong>Lighting:</strong> {court.lighting?.required ? 
+                          `${formatOptionName(court.lighting?.type || 'standard')} (${court.lighting?.poles || 0} poles)` : 'No'}
+                      </div>
+                      {court.equipment && court.equipment.length > 0 && (
+                        <div className="requirement-item full-width">
+                          <strong>Equipment:</strong> 
+                          {court.equipment.map((item, idx) => (
+                            <span key={idx} className="equipment-tag">
+                              {formatOptionName(item.name)} (x{item.quantity})
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
               </div>
-              <div className="requirement-item">
-                <strong>Flooring:</strong> {quotation.requirements?.flooring?.type || 'Not specified'}
+            ) : (
+              // Single court display
+              <div className="requirements-grid">
+                <div className="requirement-item">
+                  <strong>Subbase:</strong> {formatOptionName(quotation.requirements?.subbase?.type || 'Not specified')}
+                  {quotation.requirements?.subbase?.edgewall && ' + Edgewall'}
+                  {quotation.requirements?.subbase?.drainage?.required && ' + Drainage'}
+                </div>
+                <div className="requirement-item">
+                  <strong>Flooring:</strong> {formatOptionName(quotation.requirements?.flooring?.type || 'Not specified')}
+                </div>
+                <div className="requirement-item">
+                  <strong>Fencing:</strong> {quotation.requirements?.fencing?.required ? 
+                    `${formatOptionName(quotation.requirements.fencing?.type || 'Not specified')}` : 'No'}
+                </div>
+                <div className="requirement-item">
+                  <strong>Lighting:</strong> {quotation.requirements?.lighting?.required ? 
+                    `${formatOptionName(quotation.requirements.lighting?.type || 'standard')} (${quotation.requirements.lighting?.poles || 0} poles)` : 'No'}
+                </div>
+                {quotation.requirements?.equipment && quotation.requirements.equipment.length > 0 && (
+                  <div className="requirement-item full-width">
+                    <strong>Equipment:</strong> 
+                    {quotation.requirements.equipment.map((item, idx) => (
+                      <span key={idx} className="equipment-tag">
+                        {formatOptionName(item.name)} (x{item.quantity})
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
-              <div className="requirement-item">
-                <strong>Fencing:</strong> {quotation.requirements?.fencing?.required ? 'Yes' : 'No'} 
-                {quotation.requirements?.fencing?.type && ` (${quotation.requirements.fencing.type})`}
-              </div>
-              <div className="requirement-item">
-                <strong>Lighting:</strong> {quotation.requirements?.lighting?.required ? 'Yes' : 'No'}
-                {quotation.requirements?.lighting?.type && ` (${quotation.requirements.lighting.type})`}
-              </div>
-            </div>
+            )}
           </div>
 
           <div className="info-section">
@@ -849,7 +926,7 @@ const EditQuotationModal = ({ quotation, onClose, onSave, onRefresh }) => {
               </div>
             </div>
 
-            {/* Flooring - FIXED: This was causing the error */}
+            {/* Flooring */}
             <div className="requirement-edit-group">
               <h4>Flooring</h4>
               <div className="form-group">

@@ -34,7 +34,12 @@ const pricingSchema = new mongoose.Schema({
     wooden: { type: Number, default: 3500 },
     pvc: { type: Number, default: 2800 },
     acrylic: { type: Number, default: 2200 },
-    rubber: { type: Number, default: 3200 }
+    rubber: { type: Number, default: 3200 },
+    concrete: { type: Number, default: 1800 },
+    'synthetic-turf': { type: Number, default: 2500 },
+    'natural-grass': { type: Number, default: 1200 },
+    polyurethane: { type: Number, default: 3800 },
+    clay: { type: Number, default: 2800 }
   },
   
   // Lighting costs

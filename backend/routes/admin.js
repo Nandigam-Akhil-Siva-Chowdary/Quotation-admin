@@ -18,149 +18,223 @@ const transporter = nodemailer.createTransport({
   }
 });
 
-// Pricing calculation function
-const calculatePricing = async (quotation) => {
-  const pricing = await Pricing.findOne({ category: 'default' });
-  if (!pricing) throw new Error('Pricing data not found');
-  
-  const { projectInfo, requirements } = quotation;
-  
-  // Reset pricing with safe defaults
-  quotation.pricing = {
-    subbaseCost: 0,
-    edgewallCost: 0,
-    drainageCost: 0,
-    fencingCost: 0,
-    flooringCost: 0,
-    equipmentCost: 0,
-    lightingCost: 0,
-    subtotal: 0,
-    gstAmount: 0,
-    grandTotal: 0
-  };
-  
-  // Safe calculation functions
-  const safeMultiply = (a, b) => (Number(a) || 0) * (Number(b) || 0);
-  
-  // Check if we have multiple courts or single court requirements
-  if (requirements.courtRequirements && requirements.courtRequirements.size > 0) {
-    // Multiple courts - calculate for each court
-    requirements.courtRequirements.forEach((court, courtKey) => {
-      // Use court-specific area/perimeter or fallback to project info
-      const area = Number(court.area) || Number(projectInfo.area) || 0;
-      const perimeter = Number(court.perimeter) || Number(projectInfo.perimeter) || 0;
+// NEW: Safe pricing calculation that doesn't modify original data
+const calculatePricingSafely = async (quotation) => {
+  try {
+    const pricing = await Pricing.findOne({ category: 'default' });
+    if (!pricing) {
+      console.error('❌ Pricing data not found');
+      return null;
+    }
+
+    // Create a deep copy of the quotation to avoid modifying the original
+    const quotationCopy = JSON.parse(JSON.stringify(quotation));
+    
+    const projectInfo = quotationCopy.projectInfo || {};
+    const requirements = quotationCopy.requirements || {};
+    
+    // Initialize new pricing object
+    const newPricing = {
+      subbaseCost: 0,
+      edgewallCost: 0,
+      drainageCost: 0,
+      fencingCost: 0,
+      flooringCost: 0,
+      equipmentCost: 0,
+      lightingCost: 0,
+      subtotal: 0,
+      gstAmount: 0,
+      grandTotal: 0
+    };
+
+    const safeMultiply = (a, b) => (Number(a) || 0) * (Number(b) || 0);
+    const projectArea = Number(projectInfo.area) || 0;
+    const projectPerimeter = Number(projectInfo.perimeter) || 0;
+
+    console.log('📊 Calculating pricing for:', {
+      area: projectArea,
+      perimeter: projectPerimeter,
+      hasCourtRequirements: !!requirements.courtRequirements,
+      courtCount: requirements.courtRequirements ? Object.keys(requirements.courtRequirements).length : 0
+    });
+
+    const courtRequirements = requirements.courtRequirements || {};
+    const hasMultipleCourts = Object.keys(courtRequirements).length > 0;
+
+    if (hasMultipleCourts) {
+      console.log('🏟️ Multiple courts detected, calculating for each court...');
+      
+      Object.values(courtRequirements).forEach((court, index) => {
+        if (!court) {
+          console.log(`⚠️ Court ${index} is null, skipping`);
+          return;
+        }
+        
+        const courtArea = Number(court.area) || projectArea;
+        const courtPerimeter = Number(court.perimeter) || projectPerimeter;
+
+        const courtSubbase = court.subbase || {};
+        const courtFencing = court.fencing || {};
+        const courtFlooring = court.flooring || {};
+        const courtLighting = court.lighting || {};
+        const courtEquipment = court.equipment || [];
+
+        console.log(`📐 Court ${index + 1}: Area=${courtArea}, Perimeter=${courtPerimeter}`);
+
+        // Subbase cost
+        if (courtSubbase.type && pricing.subbase[courtSubbase.type]) {
+          const cost = safeMultiply(courtArea, pricing.subbase[courtSubbase.type]);
+          newPricing.subbaseCost += cost;
+          console.log(`🏗️ Subbase (${courtSubbase.type}): ${courtArea} m² × ₹${pricing.subbase[courtSubbase.type]} = ₹${cost}`);
+        }
+        
+        // Edgewall cost
+        if (courtSubbase.edgewall) {
+          const cost = safeMultiply(courtPerimeter, pricing.edgewall);
+          newPricing.edgewallCost += cost;
+          console.log(`🧱 Edgewall: ${courtPerimeter} m × ₹${pricing.edgewall} = ₹${cost}`);
+        }
+        
+        // Drainage cost
+        const courtDrainage = courtSubbase.drainage || {};
+        if (courtDrainage.required) {
+          const drainageLength = Math.ceil(courtPerimeter / 4.5);
+          const cost = safeMultiply(drainageLength, pricing.drainage);
+          newPricing.drainageCost += cost;
+          console.log(`💧 Drainage: ${drainageLength} m × ₹${pricing.drainage} = ₹${cost}`);
+        }
+        
+        // Fencing cost
+        if (courtFencing.required && courtFencing.type && pricing.fencing[courtFencing.type]) {
+          const cost = safeMultiply(courtPerimeter, pricing.fencing[courtFencing.type]);
+          newPricing.fencingCost += cost;
+          console.log(`🔗 Fencing (${courtFencing.type}): ${courtPerimeter} m × ₹${pricing.fencing[courtFencing.type]} = ₹${cost}`);
+        }
+        
+        // Flooring cost
+        if (courtFlooring.type && pricing.flooring[courtFlooring.type]) {
+          const cost = safeMultiply(courtArea, pricing.flooring[courtFlooring.type]);
+          newPricing.flooringCost += cost;
+          console.log(`🏓 Flooring (${courtFlooring.type}): ${courtArea} m² × ₹${pricing.flooring[courtFlooring.type]} = ₹${cost}`);
+        }
+        
+        // Equipment cost
+        if (Array.isArray(courtEquipment)) {
+          const equipmentCost = courtEquipment.reduce((total, item) => {
+            return total + (Number(item.totalCost) || 0);
+          }, 0);
+          newPricing.equipmentCost += equipmentCost;
+          console.log(`⚙️ Equipment: ₹${equipmentCost} (${courtEquipment.length} items)`);
+        }
+        
+        // Lighting cost
+        if (courtLighting.required) {
+          const poleSpacing = 9.14;
+          const poles = Math.ceil(courtPerimeter / poleSpacing);
+          const lightsPerPole = Number(courtLighting.lightsPerPole) || 2;
+          const lightType = courtLighting.type || 'standard';
+          const lightCostPerUnit = pricing.lighting[lightType] || pricing.lighting.standard;
+          const cost = poles * lightsPerPole * lightCostPerUnit;
+          
+          newPricing.lightingCost += cost;
+          console.log(`💡 Lighting (${lightType}): ${poles} poles × ${lightsPerPole} lights × ₹${lightCostPerUnit} = ₹${cost}`);
+        }
+      });
+    } else {
+      console.log('🎯 Single court configuration detected');
+      
+      const reqSubbase = requirements.subbase || {};
+      const reqFencing = requirements.fencing || {};
+      const reqFlooring = requirements.flooring || {};
+      const reqLighting = requirements.lighting || {};
+      const reqEquipment = requirements.equipment || [];
+      const reqDrainage = reqSubbase.drainage || {};
       
       // Subbase cost
-      if (court.subbase && court.subbase.type && pricing.subbase[court.subbase.type]) {
-        quotation.pricing.subbaseCost += safeMultiply(area, pricing.subbase[court.subbase.type]);
+      if (reqSubbase.type && pricing.subbase[reqSubbase.type]) {
+        newPricing.subbaseCost = safeMultiply(projectArea, pricing.subbase[reqSubbase.type]);
+        console.log(`🏗️ Subbase (${reqSubbase.type}): ${projectArea} m² × ₹${pricing.subbase[reqSubbase.type]} = ₹${newPricing.subbaseCost}`);
       }
       
       // Edgewall cost
-      if (court.subbase && court.subbase.edgewall) {
-        quotation.pricing.edgewallCost += safeMultiply(perimeter, pricing.edgewall);
+      if (reqSubbase.edgewall) {
+        newPricing.edgewallCost = safeMultiply(projectPerimeter, pricing.edgewall);
+        console.log(`🧱 Edgewall: ${projectPerimeter} m × ₹${pricing.edgewall} = ₹${newPricing.edgewallCost}`);
       }
       
       // Drainage cost
-      if (court.subbase && court.subbase.drainage && court.subbase.drainage.required) {
-        const drainageLength = Math.ceil(perimeter / 4.5);
-        quotation.pricing.drainageCost += safeMultiply(drainageLength, pricing.drainage);
+      if (reqDrainage.required) {
+        const drainageLength = Math.ceil(projectPerimeter / 4.5);
+        newPricing.drainageCost = safeMultiply(drainageLength, pricing.drainage);
+        console.log(`💧 Drainage: ${drainageLength} m × ₹${pricing.drainage} = ₹${newPricing.drainageCost}`);
       }
       
       // Fencing cost
-      if (court.fencing && court.fencing.required && court.fencing.type) {
-        quotation.pricing.fencingCost += safeMultiply(perimeter, pricing.fencing[court.fencing.type]);
+      if (reqFencing.required && reqFencing.type && pricing.fencing[reqFencing.type]) {
+        newPricing.fencingCost = safeMultiply(projectPerimeter, pricing.fencing[reqFencing.type]);
+        console.log(`🔗 Fencing (${reqFencing.type}): ${projectPerimeter} m × ₹${pricing.fencing[reqFencing.type]} = ₹${newPricing.fencingCost}`);
       }
       
       // Flooring cost
-      if (court.flooring && court.flooring.type && pricing.flooring[court.flooring.type]) {
-        quotation.pricing.flooringCost += safeMultiply(area, pricing.flooring[court.flooring.type]);
+      if (reqFlooring.type && pricing.flooring[reqFlooring.type]) {
+        newPricing.flooringCost = safeMultiply(projectArea, pricing.flooring[reqFlooring.type]);
+        console.log(`🏓 Flooring (${reqFlooring.type}): ${projectArea} m² × ₹${pricing.flooring[reqFlooring.type]} = ₹${newPricing.flooringCost}`);
       }
       
       // Equipment cost
-      if (court.equipment && Array.isArray(court.equipment)) {
-        quotation.pricing.equipmentCost += court.equipment.reduce((total, item) => {
+      if (Array.isArray(reqEquipment)) {
+        newPricing.equipmentCost = reqEquipment.reduce((total, item) => {
           return total + (Number(item.totalCost) || 0);
         }, 0);
+        console.log(`⚙️ Equipment: ₹${newPricing.equipmentCost} (${reqEquipment.length} items)`);
       }
       
       // Lighting cost
-      if (court.lighting && court.lighting.required) {
+      if (reqLighting.required) {
         const poleSpacing = 9.14;
-        const poles = Math.ceil(perimeter / poleSpacing);
-        const lightsPerPole = Number(court.lighting.lightsPerPole) || 2;
-        const lightCostPerUnit = pricing.lighting[court.lighting.type] || pricing.lighting.standard;
+        const poles = Math.ceil(projectPerimeter / poleSpacing);
+        const lightsPerPole = Number(reqLighting.lightsPerPole) || 2;
+        const lightType = reqLighting.type || 'standard';
+        const lightCostPerUnit = pricing.lighting[lightType] || pricing.lighting.standard;
         
-        quotation.pricing.lightingCost += poles * lightsPerPole * lightCostPerUnit;
-        court.lighting.poles = poles;
+        newPricing.lightingCost = poles * lightsPerPole * lightCostPerUnit;
+        console.log(`💡 Lighting (${lightType}): ${poles} poles × ${lightsPerPole} lights × ₹${lightCostPerUnit} = ₹${newPricing.lightingCost}`);
       }
+    }
+    
+    // Calculate totals
+    const costFields = ['subbaseCost', 'edgewallCost', 'drainageCost', 'fencingCost', 'flooringCost', 'equipmentCost', 'lightingCost'];
+    newPricing.subtotal = costFields.reduce((sum, field) => {
+      return sum + (Number(newPricing[field]) || 0);
+    }, 0);
+    
+    newPricing.gstAmount = newPricing.subtotal * 0.18;
+    newPricing.grandTotal = newPricing.subtotal + newPricing.gstAmount;
+    
+    // Ensure all values are numbers and rounded
+    Object.keys(newPricing).forEach(key => {
+      newPricing[key] = Math.round(Number(newPricing[key]) || 0);
     });
-  } else {
-    // Single court - use original calculation (backward compatibility)
-    const area = Number(projectInfo.area) || 0;
-    const perimeter = Number(projectInfo.perimeter) || 0;
-    
-    // Subbase cost
-    if (requirements.subbase && requirements.subbase.type && pricing.subbase[requirements.subbase.type]) {
-      quotation.pricing.subbaseCost = safeMultiply(area, pricing.subbase[requirements.subbase.type]);
-    }
-    
-    // Edgewall cost
-    if (requirements.subbase && requirements.subbase.edgewall) {
-      quotation.pricing.edgewallCost = safeMultiply(perimeter, pricing.edgewall);
-    }
-    
-    // Drainage cost
-    if (requirements.subbase && requirements.subbase.drainage && requirements.subbase.drainage.required) {
-      const drainageLength = Math.ceil(perimeter / 4.5);
-      quotation.pricing.drainageCost = safeMultiply(drainageLength, pricing.drainage);
-    }
-    
-    // Fencing cost
-    if (requirements.fencing && requirements.fencing.required && requirements.fencing.type) {
-      quotation.pricing.fencingCost = safeMultiply(perimeter, pricing.fencing[requirements.fencing.type]);
-    }
-    
-    // Flooring cost
-    if (requirements.flooring && requirements.flooring.type && pricing.flooring[requirements.flooring.type]) {
-      quotation.pricing.flooringCost = safeMultiply(area, pricing.flooring[requirements.flooring.type]);
-    }
-    
-    // Equipment cost
-    if (requirements.equipment && Array.isArray(requirements.equipment)) {
-      quotation.pricing.equipmentCost = requirements.equipment.reduce((total, item) => {
-        return total + (Number(item.totalCost) || 0);
-      }, 0);
-    }
-    
-    // Lighting cost
-    if (requirements.lighting && requirements.lighting.required) {
-      const poleSpacing = 9.14;
-      const poles = Math.ceil(perimeter / poleSpacing);
-      const lightsPerPole = Number(requirements.lighting.lightsPerPole) || 2;
-      const lightCostPerUnit = pricing.lighting[requirements.lighting.type] || pricing.lighting.standard;
-      
-      quotation.pricing.lightingCost = poles * lightsPerPole * lightCostPerUnit;
-      requirements.lighting.poles = poles;
-    }
+
+    console.log('💰 Final Pricing Calculation:');
+    console.log('--------------------------------');
+    costFields.forEach(field => {
+      console.log(`${field}: ₹${newPricing[field]}`);
+    });
+    console.log(`Subtotal: ₹${newPricing.subtotal}`);
+    console.log(`GST: ₹${newPricing.gstAmount}`);
+    console.log(`Grand Total: ₹${newPricing.grandTotal}`);
+    console.log('--------------------------------');
+
+    return newPricing;
+
+  } catch (error) {
+    console.error('❌ Error in calculatePricingSafely:', error);
+    throw error;
   }
-  
-  // Calculate totals safely
-  const costFields = ['subbaseCost', 'edgewallCost', 'drainageCost', 'fencingCost', 'flooringCost', 'equipmentCost', 'lightingCost'];
-  quotation.pricing.subtotal = costFields.reduce((sum, field) => {
-    const value = Number(quotation.pricing[field]) || 0;
-    return sum + value;
-  }, 0);
-  
-  quotation.pricing.gstAmount = quotation.pricing.subtotal * 0.18;
-  quotation.pricing.grandTotal = quotation.pricing.subtotal + quotation.pricing.gstAmount;
-  
-  // Ensure all values are numbers
-  Object.keys(quotation.pricing).forEach(key => {
-    quotation.pricing[key] = Number(quotation.pricing[key]) || 0;
-  });
 };
 
-// PDF Generation Function
+// PDF Generation Function (keep the existing one, it's working)
 const generateQuotationPDF = (quotation) => {
   return new Promise((resolve, reject) => {
     try {
@@ -170,21 +244,18 @@ const generateQuotationPDF = (quotation) => {
       });
       const buffers = [];
       
-      // Collect PDF data
       doc.on('data', buffers.push.bind(buffers));
       doc.on('end', () => {
         const pdfData = Buffer.concat(buffers);
         resolve(pdfData);
       });
 
-      // Set page dimensions
-      const pageWidth = 595.28; // A4 width in points
-      const pageHeight = 841.89; // A4 height in points
+      const pageWidth = 595.28;
+      const pageHeight = 841.89;
       const margin = 15;
       
       let yPosition = margin;
 
-      // Function to check if we need a new page
       const checkNewPage = (spaceNeeded = 10) => {
         if (yPosition + spaceNeeded > pageHeight - 50) {
           doc.addPage();
@@ -195,35 +266,25 @@ const generateQuotationPDF = (quotation) => {
         return false;
       };
 
-      // Add Header function
       const addHeader = () => {
-        // Red header background
         doc.rect(0, 0, pageWidth, 35).fill('#f44237');
-        
-        // Company Name and Info
         doc.fillColor('white')
            .fontSize(16)
            .font('Helvetica-Bold')
            .text('NEXORA GROUP', margin + 33, 12);
-        
         doc.fontSize(8)
            .font('Helvetica')
            .text('Sports Infrastructure Solutions', margin + 33, 22);
-        
-        // Contact info aligned to right
         doc.fontSize(7)
            .text('+91-8431322728', pageWidth - margin, 10, { align: 'right' })
            .text('info.nexoragroup@gmail.com', pageWidth - margin, 17, { align: 'right' })
            .text('www.nexoragroup.com', pageWidth - margin, 24, { align: 'right' });
-        
         doc.fillColor('black');
         yPosition = 45;
       };
 
-      // Initial header
       addHeader();
 
-      // Quotation title
       doc.fontSize(12)
          .font('Helvetica-Bold')
          .text('QUOTATION FOR SPORTS COURT CONSTRUCTION', pageWidth/2, yPosition, { align: 'center' });
@@ -245,20 +306,20 @@ const generateQuotationPDF = (quotation) => {
          .text('CLIENT DETAILS:', margin, yPosition);
       
       yPosition += 6;
+      const clientInfo = quotation.clientInfo || {};
       doc.fontSize(9)
          .font('Helvetica')
-         .text(`Name: ${quotation.clientInfo.name}`, margin, yPosition);
+         .text(`Name: ${clientInfo.name || 'N/A'}`, margin, yPosition);
       
       yPosition += 4;
-      doc.text(`Email: ${quotation.clientInfo.email}`, margin, yPosition);
+      doc.text(`Email: ${clientInfo.email || 'N/A'}`, margin, yPosition);
       
       yPosition += 4;
-      doc.text(`Phone: ${quotation.clientInfo.phone}`, margin, yPosition);
+      doc.text(`Phone: ${clientInfo.phone || 'N/A'}`, margin, yPosition);
       
       yPosition += 4;
       
-      // FIXED: Use PDFKit's text wrapping instead of splitTextToSize
-      const addressText = `Address: ${quotation.clientInfo.address}`;
+      const addressText = `Address: ${clientInfo.address || 'N/A'}`;
       const addressHeight = doc.heightOfString(addressText, {
         width: 180,
         align: 'left'
@@ -278,20 +339,76 @@ const generateQuotationPDF = (quotation) => {
          .text('PROPOSAL DETAILS:', margin, yPosition);
       
       yPosition += 6;
-      const sportNames = quotation.projectInfo.sports?.map(s => s.sport.replace(/-/g, ' ').toUpperCase()).join(', ') || 
-                        (quotation.projectInfo.sport ? quotation.projectInfo.sport.replace(/-/g, ' ').toUpperCase() : 'SPORTS COURT');
+      const projectInfo = quotation.projectInfo || {};
+      const sports = projectInfo.sports || [];
+      const sportNames = sports.map(s => s?.sport?.replace(/-/g, ' ').toUpperCase()).join(', ') || 
+                        (projectInfo.sport ? projectInfo.sport.replace(/-/g, ' ').toUpperCase() : 'SPORTS COURT');
       
       doc.fontSize(9)
          .font('Helvetica')
-         .text(`Proposal for ${sportNames} ${quotation.projectInfo.constructionType?.toUpperCase() || 'STANDARD'}`, margin, yPosition);
+         .text(`Proposal for ${sportNames} ${projectInfo.constructionType?.toUpperCase() || 'STANDARD'}`, margin, yPosition);
       
       yPosition += 4;
-      doc.text(`Area: ${quotation.projectInfo.area || 0} sq. meters`, margin, yPosition);
+      doc.text(`Area: ${projectInfo.area || 0} sq. meters`, margin, yPosition);
       
       yPosition += 4;
-      doc.text(`Perimeter: ${quotation.projectInfo.perimeter || 0} meters`, margin, yPosition);
+      doc.text(`Perimeter: ${projectInfo.perimeter || 0} meters`, margin, yPosition);
       
       yPosition += 10;
+
+      // Requirements Section
+      checkNewPage(30);
+      doc.fontSize(10)
+         .font('Helvetica-Bold')
+         .text('CONSTRUCTION REQUIREMENTS:', margin, yPosition);
+      
+      yPosition += 8;
+      
+      const requirements = quotation.requirements || {};
+      const courtRequirements = requirements.courtRequirements || {};
+      const hasMultipleCourts = Object.keys(courtRequirements).length > 0;
+
+      if (hasMultipleCourts) {
+        Object.values(courtRequirements).forEach((court, index) => {
+          if (!court) return;
+          
+          checkNewPage(40);
+          doc.fontSize(9)
+             .font('Helvetica-Bold')
+             .text(`${court.sport?.toUpperCase() || 'COURT'} - Court ${court.courtNumber || index + 1}`, margin, yPosition);
+          
+          yPosition += 6;
+          doc.fontSize(8)
+             .font('Helvetica')
+             .text(`Subbase: ${court.subbase?.type || 'Not specified'}${court.subbase?.edgewall ? ' + Edgewall' : ''}${court.subbase?.drainage?.required ? ' + Drainage' : ''}`, margin, yPosition);
+          
+          yPosition += 4;
+          doc.text(`Flooring: ${court.flooring?.type || 'Not specified'}`, margin, yPosition);
+          
+          yPosition += 4;
+          doc.text(`Fencing: ${court.fencing?.required ? court.fencing.type || 'Yes' : 'No'}`, margin, yPosition);
+          
+          yPosition += 4;
+          doc.text(`Lighting: ${court.lighting?.required ? court.lighting.type || 'Yes' : 'No'}`, margin, yPosition);
+          
+          yPosition += 8;
+        });
+      } else {
+        doc.fontSize(8)
+           .font('Helvetica')
+           .text(`Subbase: ${requirements.subbase?.type || 'Not specified'}${requirements.subbase?.edgewall ? ' + Edgewall' : ''}${requirements.subbase?.drainage?.required ? ' + Drainage' : ''}`, margin, yPosition);
+        
+        yPosition += 4;
+        doc.text(`Flooring: ${requirements.flooring?.type || 'Not specified'}`, margin, yPosition);
+        
+        yPosition += 4;
+        doc.text(`Fencing: ${requirements.fencing?.required ? requirements.fencing.type || 'Yes' : 'No'}`, margin, yPosition);
+        
+        yPosition += 4;
+        doc.text(`Lighting: ${requirements.lighting?.required ? requirements.lighting.type || 'Yes' : 'No'}`, margin, yPosition);
+        
+        yPosition += 8;
+      }
 
       // Price Breakdown Table
       checkNewPage(50);
@@ -301,7 +418,6 @@ const generateQuotationPDF = (quotation) => {
       
       yPosition += 8;
       
-      // Table Headers
       doc.fontSize(9)
          .font('Helvetica-Bold')
          .text('Description', margin, yPosition)
@@ -313,7 +429,6 @@ const generateQuotationPDF = (quotation) => {
       yPosition += 8;
       const pricing = quotation.pricing || {};
 
-      // Price Rows function
       const addPriceRow = (description, amount) => {
         checkNewPage(10);
         if (amount > 0) {
@@ -325,7 +440,6 @@ const generateQuotationPDF = (quotation) => {
         }
       };
 
-      // Add pricing rows
       addPriceRow('Subbase Construction', pricing.subbaseCost || 0);
       addPriceRow('Flooring System', pricing.flooringCost || 0);
       addPriceRow('Sports Equipment', pricing.equipmentCost || 0);
@@ -367,7 +481,6 @@ const generateQuotationPDF = (quotation) => {
         
         yPosition += 8;
         
-        // FIXED: Use PDFKit's text wrapping for admin notes
         const notesHeight = doc.heightOfString(quotation.adminNotes, {
           width: pageWidth - (2 * margin)
         });
@@ -407,14 +520,9 @@ const generateQuotationPDF = (quotation) => {
         yPosition += 10;
       });
 
-      // Footer function for all pages
       const addFooter = () => {
         const footerY = pageHeight - 20;
-        
-        // Red footer background
         doc.rect(0, footerY, pageWidth, 20).fill('#f44237');
-        
-        // Footer text
         doc.fillColor('white')
            .fontSize(7)
            .font('Helvetica')
@@ -424,10 +532,8 @@ const generateQuotationPDF = (quotation) => {
                  pageWidth/2, footerY + 13, { align: 'center' });
       };
 
-      // Add footer to current page
       addFooter();
 
-      // Page number (simple version since PDFKit doesn't have easy multi-page footer)
       doc.fillColor(100, 100, 100)
          .fontSize(8)
          .text('Page 1 of 1', pageWidth/2, pageHeight - 30, { align: 'center' });
@@ -439,93 +545,41 @@ const generateQuotationPDF = (quotation) => {
       reject(error);
     }
   });
-};
+}
 
 // Email sending function with PDF attachment
 const sendQuotationEmailWithPDF = async (quotation) => {
   try {
     console.log('📧 Generating PDF for quotation...');
     
-    // Generate PDF
     const pdfBuffer = await generateQuotationPDF(quotation);
     
     console.log('📧 PDF generated successfully, preparing email...');
 
-    // Define sportNames properly for email
-    const sportNames = quotation.projectInfo.sports?.map(s => s.sport.replace(/-/g, ' ').toUpperCase()).join(', ') || 
-                      (quotation.projectInfo.sport ? quotation.projectInfo.sport.replace(/-/g, ' ').toUpperCase() : 'SPORTS COURT');
+    const projectInfo = quotation.projectInfo || {};
+    const sports = projectInfo.sports || [];
+    const sportNames = sports.map(s => s?.sport?.replace(/-/g, ' ').toUpperCase()).join(', ') || 
+                      (projectInfo.sport ? projectInfo.sport.replace(/-/g, ' ').toUpperCase() : 'SPORTS COURT');
+
+    const clientInfo = quotation.clientInfo || {};
 
     const mailOptions = {
       from: `"Nexora Group" <${process.env.EMAIL_USER || 'info.nexoragroup@gmail.com'}>`,
-      to: quotation.clientInfo.email,
+      to: clientInfo.email,
       subject: `Your Approved Quotation #${quotation.quotationNumber} - Nexora Group`,
       html: `
         <!DOCTYPE html>
         <html>
         <head>
             <style>
-                body { 
-                    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
-                    line-height: 1.6; 
-                    color: #333; 
-                    max-width: 600px; 
-                    margin: 0 auto; 
-                    padding: 20px;
-                }
-                .header { 
-                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
-                    color: white; 
-                    padding: 30px; 
-                    text-align: center; 
-                    border-radius: 10px 10px 0 0;
-                }
-                .content { 
-                    padding: 30px; 
-                    background: #f8f9fa;
-                    border-radius: 0 0 10px 10px;
-                }
-                .quotation-details { 
-                    background: white; 
-                    padding: 20px; 
-                    border-radius: 8px; 
-                    margin: 20px 0; 
-                    border-left: 4px solid #3498db;
-                }
-                .price-highlight { 
-                    font-size: 20px; 
-                    font-weight: bold; 
-                    color: #2c3e50; 
-                    background: #e8f4fd;
-                    padding: 15px;
-                    border-radius: 5px;
-                    text-align: center;
-                }
-                .button { 
-                    background: #27ae60; 
-                    color: white; 
-                    padding: 15px 30px; 
-                    text-decoration: none; 
-                    border-radius: 5px; 
-                    display: inline-block; 
-                    font-weight: bold;
-                    margin: 10px 5px;
-                }
-                .footer { 
-                    background: #2c3e50; 
-                    color: white; 
-                    padding: 20px; 
-                    text-align: center; 
-                    font-size: 12px; 
-                    border-radius: 5px;
-                    margin-top: 20px;
-                }
-                .attachment-note {
-                    background: #fff3cd;
-                    padding: 15px;
-                    border-radius: 5px;
-                    border-left: 4px solid #ffc107;
-                    margin: 20px 0;
-                }
+                body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }
+                .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
+                .content { padding: 30px; background: #f8f9fa; border-radius: 0 0 10px 10px; }
+                .quotation-details { background: white; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #3498db; }
+                .price-highlight { font-size: 20px; font-weight: bold; color: #2c3e50; background: #e8f4fd; padding: 15px; border-radius: 5px; text-align: center; }
+                .button { background: #27ae60; color: white; padding: 15px 30px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold; margin: 10px 5px; }
+                .footer { background: #2c3e50; color: white; padding: 20px; text-align: center; font-size: 12px; border-radius: 5px; margin-top: 20px; }
+                .attachment-note { background: #fff3cd; padding: 15px; border-radius: 5px; border-left: 4px solid #ffc107; margin: 20px 0; }
             </style>
         </head>
         <body>
@@ -537,7 +591,7 @@ const sendQuotationEmailWithPDF = async (quotation) => {
             <div class="content">
                 <h2 style="color: #27ae60; text-align: center;">🎉 Your Quotation Has Been Approved!</h2>
                 
-                <p>Dear <strong>${quotation.clientInfo.name}</strong>,</p>
+                <p>Dear <strong>${clientInfo.name || 'Valued Client'}</strong>,</p>
                 
                 <p>We're pleased to inform you that your sports ground construction quotation has been reviewed and approved by our team.</p>
                 
@@ -559,11 +613,11 @@ const sendQuotationEmailWithPDF = async (quotation) => {
                         </tr>
                         <tr>
                             <td style="padding: 8px 0; border-bottom: 1px solid #eee;"><strong>Construction Type:</strong></td>
-                            <td style="padding: 8px 0; border-bottom: 1px solid #eee;">${quotation.projectInfo.constructionType || 'Standard'}</td>
+                            <td style="padding: 8px 0; border-bottom: 1px solid #eee;">${projectInfo.constructionType || 'Standard'}</td>
                         </tr>
                         <tr>
                             <td style="padding: 8px 0;"><strong>Area:</strong></td>
-                            <td style="padding: 8px 0;">${quotation.projectInfo.area || 0} sq. meters</td>
+                            <td style="padding: 8px 0;">${projectInfo.area || 0} sq. meters</td>
                         </tr>
                     </table>
                 </div>
@@ -613,7 +667,7 @@ const sendQuotationEmailWithPDF = async (quotation) => {
 
     console.log('📧 Sending email with PDF attachment...');
     const info = await transporter.sendMail(mailOptions);
-    console.log(`✅ Email with PDF sent successfully to ${quotation.clientInfo.email}`);
+    console.log(`✅ Email with PDF sent successfully to ${clientInfo.email}`);
     
     return { 
       success: true, 
@@ -693,13 +747,14 @@ router.get('/quotations', async (req, res) => {
   }
 });
 
-// Get single quotation
+// Get single quotation with detailed requirements
 router.get('/quotations/:id', async (req, res) => {
   try {
     const quotation = await Quotation.findById(req.params.id);
     if (!quotation) {
       return res.status(404).json({ message: 'Quotation not found' });
     }
+    
     res.json(quotation);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -731,7 +786,6 @@ router.put('/quotations/:id/edit', async (req, res) => {
     const { clientInfo, projectInfo, requirements, pricing } = req.body;
     
     console.log('📝 Editing quotation:', req.params.id);
-    console.log('📦 Received data:', { clientInfo, projectInfo, requirements, pricing });
 
     const quotation = await Quotation.findById(req.params.id);
     if (!quotation) {
@@ -761,7 +815,6 @@ router.put('/quotations/:id/edit', async (req, res) => {
     }
     
     if (pricing) {
-      // Ensure all pricing fields are numbers
       const sanitizedPricing = {};
       Object.keys(pricing).forEach(key => {
         sanitizedPricing[key] = Number(pricing[key]) || 0;
@@ -770,17 +823,6 @@ router.put('/quotations/:id/edit', async (req, res) => {
         ...quotation.pricing,
         ...sanitizedPricing 
       };
-    }
-
-    // Recalculate totals if pricing was modified
-    if (pricing) {
-      const costFields = ['subbaseCost', 'edgewallCost', 'drainageCost', 'fencingCost', 'flooringCost', 'equipmentCost', 'lightingCost'];
-      quotation.pricing.subtotal = costFields.reduce((sum, field) => {
-        return sum + (Number(quotation.pricing[field]) || 0);
-      }, 0);
-      
-      quotation.pricing.gstAmount = quotation.pricing.subtotal * 0.18;
-      quotation.pricing.grandTotal = quotation.pricing.subtotal + quotation.pricing.gstAmount;
     }
 
     quotation.updatedAt = new Date();
@@ -802,7 +844,7 @@ router.put('/quotations/:id/edit', async (req, res) => {
   }
 });
 
-// Approve quotation with PDF email
+// NEW: Fixed Approve quotation with PDF email
 router.post('/quotations/:id/approve', async (req, res) => {
   try {
     const quotation = await Quotation.findById(req.params.id);
@@ -810,38 +852,71 @@ router.post('/quotations/:id/approve', async (req, res) => {
       return res.status(404).json({ message: 'Quotation not found' });
     }
     
-    // Update status
-    quotation.status = 'approved';
-    quotation.adminNotes = req.body.notes || '';
-    quotation.approvedAt = new Date();
-    quotation.approvedBy = req.user.username;
+    console.log('✅ Starting approval process for quotation:', quotation.quotationNumber);
     
-    await quotation.save();
+    // Calculate pricing safely without modifying the original quotation
+    let newPricing = null;
+    try {
+      console.log('💰 Recalculating pricing safely...');
+      newPricing = await calculatePricingSafely(quotation);
+      console.log('✅ Pricing calculation completed');
+    } catch (calcError) {
+      console.error('❌ Error recalculating pricing during approval:', calcError.message);
+      // Use existing pricing if recalculation fails
+      newPricing = quotation.pricing || {};
+    }
     
-    // Send email with PDF attachment
-    const emailResult = await sendQuotationEmailWithPDF(quotation);
+    // Update only the necessary fields - don't modify requirements or projectInfo
+    const updateData = {
+      status: 'approved',
+      adminNotes: req.body.notes || '',
+      approvedAt: new Date(),
+      approvedBy: req.user.username,
+      updatedAt: new Date()
+    };
+    
+    // Only update pricing if we have valid new pricing
+    if (newPricing && newPricing.grandTotal > 0) {
+      updateData.pricing = newPricing;
+    }
+    
+    console.log('💾 Updating quotation with new data...');
+    const updatedQuotation = await Quotation.findByIdAndUpdate(
+      req.params.id,
+      updateData,
+      { new: true, runValidators: true }
+    );
+    
+    console.log('✅ Quotation updated successfully');
+    
+    // Send email with PDF attachment using the updated quotation
+    console.log('📧 Sending email with PDF...');
+    const emailResult = await sendQuotationEmailWithPDF(updatedQuotation);
     
     if (emailResult.success) {
+      console.log('✅ Email sent successfully');
       res.json({ 
         message: 'Quotation approved and PDF sent to client via email!', 
-        quotation,
+        quotation: updatedQuotation,
         emailSent: true,
         pdfAttached: true,
-        recipient: quotation.clientInfo.email
+        recipient: updatedQuotation.clientInfo.email
       });
     } else {
+      console.log('❌ Email failed to send');
       res.json({ 
         message: 'Quotation approved but email with PDF failed to send. Please contact the client manually.', 
-        quotation,
+        quotation: updatedQuotation,
         emailSent: false,
         pdfAttached: false,
         emailError: emailResult.error,
-        recipient: quotation.clientInfo.email
+        recipient: updatedQuotation.clientInfo.email
       });
     }
     
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error('❌ Error approving quotation:', error);
+    res.status(500).json({ message: 'Error approving quotation: ' + error.message });
   }
 });
 
